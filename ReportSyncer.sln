@@ -21,6 +21,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{9AFA5924-1
 		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\20_ReportSyncer Backend Architecture.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\20_ReportSyncer Backend Architecture.md
 		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\30_ReportSyncer Backend Arch.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\30_ReportSyncer Backend Arch.md
 		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\40_Backend Implementation Plan.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\40_Backend Implementation Plan.md
+		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\Project Instructions.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\Project Instructions.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReportSyncer.Core.Tests", "Tests\ReportSyncer.Core.Tests\ReportSyncer.Core.Tests.csproj", "{021971B3-A02E-49AE-BF35-2CEEFB0E4161}"

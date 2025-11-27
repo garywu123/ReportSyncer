@@ -7,4 +7,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\DotNetToolkit\DotNetToolkit.Database\DotNetToolkit.Database.csproj" />
+    <ProjectReference Include="..\..\DotNetToolkit\DotNetToolkit.Logging\DotNetToolkit.Logging.csproj" />
+    <ProjectReference Include="..\ReportSyncer.Core\ReportSyncer.Core.csproj" />
+  </ItemGroup>
+
 </Project>
