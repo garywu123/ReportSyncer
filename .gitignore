@@ -1,0 +1,64 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build Folders
+[Bb]in/
+[Oo]bj/
+**/bin/
+**/obj/
+
+# Visual Studio Code
+.vscode/
+
+# Rider / IntelliJ
+.idea/
+*.sln.iml
+
+# NuGet
+*.nupkg
+packages/
+# If you use PackageReference you can remove the packages/ entry
+
+# Publish output
+publish/
+*.Publish.xml
+*.azurePubxml
+
+# IIS Express
+IISExpress/
+
+# Resharper
+_ReSharper*/
+*.DotSettings.user
+
+# DotCover
+*.dotCover
+
+# Rider/IDE caches
+*.sublime-workspace
+*.sublime-project
+
+# User-specific/project user files
+*.user
+*.userosscache
+*.csproj.user
+
+# Secrets / local settings
+appsettings.Development.json
+*.Local.user
+
+# Logs, temp files
+*.log
+*.tmp
+
+# Test results
+TestResults/
+*.trx
+
+# OS files
+.DS_Store
+Thumbs.db

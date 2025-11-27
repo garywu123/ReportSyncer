@@ -1,0 +1,6 @@
+@ReportSyncer.WebApi_HostAddress = http://localhost:5140
+
+GET {{ReportSyncer.WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
