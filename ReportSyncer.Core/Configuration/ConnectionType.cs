@@ -12,26 +12,9 @@ namespace ReportSyncer.Core.Configuration
     /// Defines the type of database connection, which determines whether automatic
     /// context injection occurs during synchronization operations.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Connection type is critical for the context injection feature:
-    /// </para>
-    /// <list type="bullet">
-    /// <item>
-    /// <description>
-    /// When syncing from <see cref="Application"/> to <see cref="Reporting"/>, 
-    /// the system automatically injects a context column (typically CustomerId) 
-    /// into the target data using job parameters.
-    /// </description>
-    /// </item>
-    /// <item>
-    /// <description>
-    /// When syncing from <see cref="Reporting"/> to <see cref="Reporting"/>, 
-    /// no automatic context injection occurs; CustomerId is treated as a normal column.
-    /// </description>
-    /// </item>
-    /// </list>
-    /// </remarks>
+        /// <summary>
+        /// Supported connection types.
+        /// </summary>
     public enum ConnectionType
     {
         /// <summary>

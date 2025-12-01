@@ -11,56 +11,9 @@ using System;
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>
-    /// Represents a named database connection with environment classification and type
-    /// information used to enforce safety rules and context injection behavior.
+    /// <summary>
+    /// Database connection configuration for sync operations.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Connections are referenced by name from sync jobs. Each connection defines:
-    /// </para>
-    /// <list type="bullet">
-    /// <item>
-    /// <description>
-    /// <b>Environment:</b> Classification (Prod, Dev, Test, etc.) used to enforce safety rules
-    /// like forbidding Prod-to-Prod syncs.
-    /// </description>
-    /// </item>
-    /// <item>
-    /// <description>
-    /// <b>Type:</b> Application or Reporting classification that determines whether automatic
-    /// context injection occurs when this connection is used as source or target.
-    /// </description>
-    /// </item>
-    /// </list>
-    /// <para>
-    /// <b>Safety Rules:</b> The Environment property works with <see cref="SafetyConfig"/> to
-    /// prevent dangerous operations like Production-to-Production syncs or self-syncs.
-    /// </para>
-    /// <para>
-    /// <b>Context Injection:</b> When syncing from Application → Reporting, the system
-    /// automatically injects context columns (typically CustomerId) into target inserts.
-    /// When syncing Reporting → Reporting, no automatic injection occurs.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <![CDATA[
-    /// // Production application database
-    /// var prodApp = new ConnectionConfig(
-    ///     name: "AppDB_Prod",
-    ///     connectionString: "Server=prod-sql;Database=AppDB;Trusted_Connection=true;",
-    ///     environment: EnvironmentType.Prod,
-    ///     type: ConnectionType.Application
-    /// );
-    /// 
-    /// // Development reporting database
-    /// var devReporting = new ConnectionConfig(
-    ///     name: "ReportDB_Dev",
-    ///     connectionString: "Server=dev-sql;Database=ReportDB;Trusted_Connection=true;",
-    ///     environment: EnvironmentType.Dev,
-    ///     type: ConnectionType.Reporting
-    /// );
-    /// ]]>
-    /// </example>
     public class ConnectionConfig
     {
         /// <summary>

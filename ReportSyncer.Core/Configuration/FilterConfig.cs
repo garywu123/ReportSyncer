@@ -9,61 +9,11 @@
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>
-    /// Defines filtering criteria for synchronization operations, supporting both
-    /// date range filters and key-based filters that can be combined.
+    /// <summary>
+    /// Filter configuration for table sync tasks.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Filters reduce the scope of data synchronized from source to target, enabling
-    /// incremental syncs and reducing resource consumption. Filters can be combined:
-    /// when both date range and key filters are specified, records must satisfy both conditions.
-    /// </para>
-    /// <para>
-    /// <b>Parameter Placeholders:</b> Filter values support parameter placeholders in the
-    /// format <c>"{ParameterName}"</c> which are resolved from the job's <c>Parameters</c>
-    /// dictionary at runtime.
-    /// </para>
-    /// <para>
-    /// <b>Date Range Filter:</b> Filters records where <c>DateColumn BETWEEN StartDate AND EndDate</c>.
-    /// All three properties (DateColumn, StartDate, EndDate) must be specified together or all null.
-    /// </para>
-    /// <para>
-    /// <b>Key Filter:</b> Filters records where <c>KeyColumn = Value</c>.
-    /// Both KeyColumn and Value must be specified together or both null.
-    /// </para>
-    /// </remarks>
     /// <example>
-    /// <![CDATA[
-    /// // Date range filter with parameter placeholders
-    /// var dateFilter = new FilterConfig(
-    ///     dateColumn: "OrderDate",
-    ///     startDate: "{StartDate}",    // Resolved from job.Parameters["StartDate"]
-    ///     endDate: "{EndDate}",        // Resolved from job.Parameters["EndDate"]
-    ///     keyColumn: null,
-    ///     value: null
-    /// );
-    /// 
-    /// // Key filter with parameter placeholder
-    /// var keyFilter = new FilterConfig(
-    ///     dateColumn: null,
-    ///     startDate: null,
-    ///     endDate: null,
-    ///     keyColumn: "CustomerId",
-    ///     value: "{CustomerId}"        // Resolved from job.Parameters["CustomerId"]
-    /// );
-    /// 
-    /// // Combined filter (date range AND key filter)
-    /// var compositeFilter = new FilterConfig(
-    ///     dateColumn: "OrderDate",
-    ///     startDate: "{StartDate}",
-    ///     endDate: "{EndDate}",
-    ///     keyColumn: "CustomerId",
-    ///     value: "{CustomerId}"
-    /// );
-    /// 
-    /// // No filter (sync all records)
-    /// var noFilter = new FilterConfig(null, null, null, null, null);
-    /// ]]>
     /// </example>
     public class FilterConfig
     {

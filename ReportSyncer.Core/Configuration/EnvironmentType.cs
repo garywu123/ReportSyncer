@@ -9,43 +9,35 @@
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>
-    /// Defines the environment type for a database connection, used to enforce
-    /// safety rules such as preventing Prod-to-Prod synchronization.
+    /// Environment types (Dev, Prod, etc.).
     /// </summary>
-    /// <remarks>
-    /// The environment type is used in conjunction with <see cref="SafetyConfig"/> 
-    /// to prevent dangerous sync operations like Production-to-Production copies 
-    /// when <c>ForbidProdToProd</c> is enabled.
-    /// </remarks>
+    /// <summary>
+    /// Environment types (Dev, Prod, etc.).
+    /// </summary>
     public enum EnvironmentType
     {
         /// <summary>
-        /// Production environment. Syncs from or to Production are subject to 
-        /// strict safety rules to prevent accidental data loss or corruption.
+        /// Production environment.
         /// </summary>
         Prod,
 
         /// <summary>
-        /// Development environment. Typically used as a target for data refreshes 
-        /// from Production or Test environments.
+        /// Development environment.
         /// </summary>
         Dev,
 
         /// <summary>
-        /// Test/QA environment. Used for testing and validation before deploying 
-        /// changes to Production.
+        /// Test/QA environment.
         /// </summary>
         Test,
 
         /// <summary>
-        /// Staging environment. Pre-production environment that mirrors Production 
-        /// configuration for final testing.
+        /// Staging environment.
         /// </summary>
         Staging,
 
         /// <summary>
-        /// Reporting environment. Specialized environment for business intelligence 
-        /// and reporting workloads.
+        /// Reporting environment.
         /// </summary>
         Reporting
     }

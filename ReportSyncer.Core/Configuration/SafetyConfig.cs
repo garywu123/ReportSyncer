@@ -14,42 +14,9 @@ namespace ReportSyncer.Core.Configuration
     /// Defines global safety rules that prevent dangerous synchronization operations,
     /// such as Production-to-Production syncs and self-syncs.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Safety rules are enforced during configuration validation and pre-flight checks
-    /// to prevent accidental data loss or corruption.
-    /// </para>
-    /// <para>
-    /// <b>Production-to-Production Protection:</b> When <see cref="ForbidProdToProd"/> is enabled,
-    /// the system blocks any sync where both source and target connections have
-    /// <see cref="EnvironmentType.Prod"/> environment classification.
-    /// </para>
-    /// <para>
-    /// <b>Self-Sync Protection:</b> When <see cref="RequireDifferentConnections"/> is enabled,
-    /// the system blocks syncs where source and target resolve to the same database.
-    /// </para>
-    /// <para>
-    /// <b>Large Delete Threshold:</b> When estimated deletes exceed <see cref="ConfirmLargeDeletePct"/>
-    /// of the target table, the system requires explicit user confirmation before proceeding.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <![CDATA[
-    /// // Strict safety for production usage
-    /// var strictSafety = new SafetyConfig(
-    ///     forbidProdToProd: true,              // Block Prod→Prod syncs
-    ///     requireDifferentConnections: true,   // Block self-syncs
-    ///     confirmLargeDeletePct: 0.8           // Confirm if deleting >80% of target
-    /// );
-    /// 
-    /// // Relaxed safety for development
-    /// var devSafety = new SafetyConfig(
-    ///     forbidProdToProd: false,
-    ///     requireDifferentConnections: true,
-    ///     confirmLargeDeletePct: 0.95
-    /// );
-    /// ]]>
-    /// </example>
+    /// <summary>
+    /// Safety configuration for sync operations.
+    /// </summary>
     public class SafetyConfig
     {
         /// <summary>

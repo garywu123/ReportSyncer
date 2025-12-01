@@ -13,29 +13,9 @@ using System.Linq;
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>
-    /// Defines the business key (composite key) for a table, used for deduplication
-    /// logic and WHERE NOT EXISTS patterns during synchronization.
+    /// <summary>
+    /// Key column configuration for table sync tasks.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Business keys identify unique records for merge/upsert operations. When specified,
-    /// the sync engine uses these keys to determine which records already exist in the
-    /// target and which need to be inserted.
-    /// </para>
-    /// <para>
-    /// For composite keys, specify multiple column names in the order they should be
-    /// evaluated. All key columns must exist in both source and target tables.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <![CDATA[
-    /// // Single key column
-    /// var singleKey = new KeyConfig(new[] { "CustomerId" });
-    /// 
-    /// // Composite key (CustomerId + OrderDate)
-    /// var compositeKey = new KeyConfig(new[] { "CustomerId", "OrderDate" });
-    /// ]]>
-    /// </example>
     public class KeyConfig
     {
         private readonly string[] _businessKey;

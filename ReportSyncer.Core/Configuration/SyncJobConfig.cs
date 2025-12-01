@@ -13,70 +13,9 @@ using System.Linq;
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>
-    /// Defines a synchronization job that copies data from a source connection to a target connection,
-    /// processing one or more table tasks with shared parameters.
+    /// <summary>
+    /// Configuration for a sync job.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A sync job represents a logical unit of work that:
-    /// </para>
-    /// <list type="bullet">
-    /// <item>
-    /// <description>
-    /// Connects to a source and target database using named connections.
-    /// </description>
-    /// </item>
-    /// <item>
-    /// <description>
-    /// Defines parameters (e.g., CustomerId, StartDate, EndDate) used for filtering and context injection.
-    /// </description>
-    /// </item>
-    /// <item>
-    /// <description>
-    /// Contains one or more table tasks that define what data to sync and how.
-    /// </description>
-    /// </item>
-    /// </list>
-    /// <para>
-    /// <b>Parameter Resolution:</b> Job parameters are referenced in filters and added columns using
-    /// placeholder syntax like <c>"{CustomerId}"</c>. The system resolves these at runtime from the
-    /// <see cref="Parameters"/> dictionary.
-    /// </para>
-    /// <para>
-    /// <b>Context Injection:</b> When the source connection type is Application and target is Reporting,
-    /// the system automatically injects a context column (typically CustomerId) using a parameter value.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <code>
-    /// <![CDATA[
-    /// // Filtered historical sync from Production to Dev
-    /// var job = new SyncJobConfig(
-    ///     name: "Sync-Orders-Last7Days",
-    ///     description: "Sync last 7 days of orders from Prod to Dev",
-    ///     sourceConnection: "AppDB_Prod",
-    ///     targetConnection: "AppDB_Dev",
-    ///     parameters: new Dictionary<string, string> {
-    ///         { "StartDate", "2025-11-24" },
-    ///         { "EndDate", "2025-12-01" }
-    ///     },
-    ///     tables: new[] {
-    ///         new TableTaskConfig(
-    ///             source: "Orders",
-    ///             target: "Orders",
-    ///             enabled: true,
-    ///             preSyncTargetAction: true,
-    ///             filter: new FilterConfig(
-    ///                 dateColumn: "OrderDate",
-    ///                 startDate: "{StartDate}",
-    ///                 endDate: "{EndDate}"
-    ///             )
-    ///         )
-    ///     }
-    /// );
-    /// ]]>
-    /// </code>
-    /// </example>
     public class SyncJobConfig
     {
         private readonly Dictionary<string, string> _parameters;
@@ -85,18 +24,11 @@ namespace ReportSyncer.Core.Configuration
         /// <summary>
         /// Gets the unique name of this sync job.
         /// </summary>
-        /// <remarks>
-        /// Job names should be descriptive and indicate the purpose (e.g., "Sync-Customers-ProdToDev").
-        /// Job names must be unique within a configuration file.
-        /// </remarks>
         public string Name { get; }
 
         /// <summary>
         /// Gets the optional description of this sync job.
         /// </summary>
-        /// <remarks>
-        /// Use descriptions to document the purpose, schedule, or special considerations for this job.
-        /// </remarks>
         public string? Description { get; }
 
         /// <summary>
@@ -114,41 +46,11 @@ namespace ReportSyncer.Core.Configuration
         /// <summary>
         /// Gets the parameters for this job, used for filter resolution and context injection.
         /// </summary>
-        /// <remarks>
-        /// <para>
-        /// Parameters are referenced in filters and added columns using placeholder syntax:
-        /// </para>
-        /// <list type="bullet">
-        /// <item>
-        /// <description>
-        /// Filter date range: <c>"{StartDate}"</c>, <c>"{EndDate}"</c>
-        /// </description>
-        /// </item>
-        /// <item>
-        /// <description>
-        /// Filter key: <c>"{CustomerId}"</c>
-        /// </description>
-        /// </item>
-        /// <item>
-        /// <description>
-        /// Added column context injection: <c>"{CustomerId}"</c>
-        /// </description>
-        /// </item>
-        /// </list>
-        /// <para>
-        /// Common parameters include: CustomerId, StartDate, EndDate, LocationId, etc.
-        /// </para>
-        /// </remarks>
         public IReadOnlyDictionary<string, string> Parameters => _parameters;
 
         /// <summary>
         /// Gets the list of table tasks to execute in this job.
         /// </summary>
-        /// <remarks>
-        /// Each table task defines synchronization for one source→target table pair.
-        /// Tables are processed sequentially in the order defined. At least one table
-        /// task must be defined and enabled.
-        /// </remarks>
         public IReadOnlyList<TableTaskConfig> Tables => _tables;
 
         /// <summary>
