@@ -1,0 +1,166 @@
+// ============================================================================
+// File: ConnectionConfig.cs
+// Author: Gary Wu
+// Date: 2025-12-01
+// Project: ReportSyncer
+// Description: Configuration for a database connection with environment and type metadata.
+// ============================================================================
+
+using System;
+
+namespace ReportSyncer.Core.Configuration
+{
+    /// <summary>
+    /// Represents a named database connection with environment classification and type
+    /// information used to enforce safety rules and context injection behavior.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Connections are referenced by name from sync jobs. Each connection defines:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>
+    /// <description>
+    /// <b>Environment:</b> Classification (Prod, Dev, Test, etc.) used to enforce safety rules
+    /// like forbidding Prod-to-Prod syncs.
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <description>
+    /// <b>Type:</b> Application or Reporting classification that determines whether automatic
+    /// context injection occurs when this connection is used as source or target.
+    /// </description>
+    /// </item>
+    /// </list>
+    /// <para>
+    /// <b>Safety Rules:</b> The Environment property works with <see cref="SafetyConfig"/> to
+    /// prevent dangerous operations like Production-to-Production syncs or self-syncs.
+    /// </para>
+    /// <para>
+    /// <b>Context Injection:</b> When syncing from Application → Reporting, the system
+    /// automatically injects context columns (typically CustomerId) into target inserts.
+    /// When syncing Reporting → Reporting, no automatic injection occurs.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <![CDATA[
+    /// // Production application database
+    /// var prodApp = new ConnectionConfig(
+    ///     name: "AppDB_Prod",
+    ///     connectionString: "Server=prod-sql;Database=AppDB;Trusted_Connection=true;",
+    ///     environment: EnvironmentType.Prod,
+    ///     type: ConnectionType.Application
+    /// );
+    /// 
+    /// // Development reporting database
+    /// var devReporting = new ConnectionConfig(
+    ///     name: "ReportDB_Dev",
+    ///     connectionString: "Server=dev-sql;Database=ReportDB;Trusted_Connection=true;",
+    ///     environment: EnvironmentType.Dev,
+    ///     type: ConnectionType.Reporting
+    /// );
+    /// ]]>
+    /// </example>
+    public class ConnectionConfig
+    {
+        /// <summary>
+        /// Gets the unique name of this connection, used to reference it from sync jobs.
+        /// </summary>
+        /// <remarks>
+        /// Connection names must be unique within a configuration file and are case-sensitive.
+        /// Use descriptive names that indicate both the database and environment (e.g., "AppDB_Prod", "ReportDB_Dev").
+        /// </remarks>
+        public string Name { get; }
+
+        /// <summary>
+        /// Gets the SQL Server connection string for this connection.
+        /// </summary>
+        /// <remarks>
+        /// Should include all necessary parameters for SQL Server connectivity including
+        /// server, database, authentication, and any connection pooling or timeout settings.
+        /// Supports both Windows Authentication (Integrated Security) and SQL Authentication.
+        /// </remarks>
+        public string ConnectionString { get; }
+
+        /// <summary>
+        /// Gets the environment classification for this connection.
+        /// </summary>
+        /// <remarks>
+        /// Used to enforce safety rules such as preventing Prod→Prod syncs when
+        /// <see cref="SafetyConfig.ForbidProdToProd"/> is enabled.
+        /// </remarks>
+        public EnvironmentType Environment { get; }
+
+        /// <summary>
+        /// Gets the type classification for this connection.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Determines context injection behavior:
+        /// </para>
+        /// <list type="bullet">
+        /// <item>
+        /// <description>
+        /// <b>Application → Reporting:</b> System automatically injects context columns
+        /// (e.g., CustomerId) from job parameters.
+        /// </description>
+        /// </item>
+        /// <item>
+        /// <description>
+        /// <b>Reporting → Reporting:</b> No automatic context injection; treat CustomerId
+        /// as a normal column.
+        /// </description>
+        /// </item>
+        /// <item>
+        /// <description>
+        /// <b>Application → Application:</b> Typically not allowed; use for specialized scenarios only.
+        /// </description>
+        /// </item>
+        /// </list>
+        /// </remarks>
+        public ConnectionType Type { get; }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ConnectionConfig"/> class.
+        /// </summary>
+        /// <param name="name">
+        /// The unique name for this connection. Must not be null or empty.
+        /// Used to reference this connection from sync jobs.
+        /// </param>
+        /// <param name="connectionString">
+        /// The SQL Server connection string. Must not be null or empty.
+        /// </param>
+        /// <param name="environment">
+        /// The environment classification for safety rule enforcement.
+        /// </param>
+        /// <param name="type">
+        /// The connection type that determines context injection behavior.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="name"/> or <paramref name="connectionString"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="name"/> or <paramref name="connectionString"/> is empty or whitespace.
+        /// </exception>
+        public ConnectionConfig(
+            string name,
+            string connectionString,
+            EnvironmentType environment,
+            ConnectionType type)
+        {
+            if (name == null)
+                throw new ArgumentNullException(nameof(name));
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Connection name cannot be empty or whitespace.", nameof(name));
+            if (connectionString == null)
+                throw new ArgumentNullException(nameof(connectionString));
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ArgumentException("Connection string cannot be empty or whitespace.", nameof(connectionString));
+
+            Name = name;
+            ConnectionString = connectionString;
+            Environment = environment;
+            Type = type;
+        }
+    }
+}
