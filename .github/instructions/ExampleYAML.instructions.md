@@ -1,0 +1,257 @@
+<!--
+Author: Gary Wu
+Project: ReportSyncer
+Date: 2025-12-01
+Purpose: Example YAML configuration for ReportSyncer. Demonstrates supported run/safety/settings, connection definitions, and syncJobs scenarios referenced by the Minimal Requirements document (doc 10) and Backend Architecture (doc 30).
+Related: 10_Report Syncer Minimal Sufficient Documentation Stack, 30_ReportSyncer Backend Arch
+-->
+
+version: 1.2
+
+# ==============================================================================
+# 1. GLOBAL RUNTIME & SAFETY SETTINGS
+# ==============================================================================
+run:
+  dryRun: false
+  defaultBatchSize: 2000
+  deleteChunkSize: 5000
+  useTvpIfAvailable: true  # Optimization enabled
+
+safety:
+  # Prevents accidentally syncing Prod to Prod (e.g., Report_Prod -> App_Prod)
+  forbidProdToProd: true
+  
+  # Prevents self-sync (Source == Target)
+  requireDifferentConnections: true
+  
+  # If a delete operation affects > 80% of rows, the UI/Backend demands manual confirmation
+  confirmLargeDeletePct: 0.8
+
+schemaPolicy:
+  # strict mode: fail if columns don't match exactly
+  onMismatch: fail 
+  requirePrimaryKey: true
+  allowExtraTargetColumns: true
+
+# ==============================================================================
+# 2. CONNECTIONS
+# ==============================================================================
+connections:
+  # SCENARIO: Single Tenant Application Database (Source of Truth)
+  - name: App_Prod_TenantA
+    connectionString: "Server=10.0.0.1;Database=AGV_App_TenantA;..."
+    environment: Prod
+    type: Application # <--- Triggers Context Injection logic in SchemaMapper
+
+  # SCENARIO: Multi-Tenant Reporting Database (Production)
+  - name: Report_Prod
+    connectionString: "Server=10.0.0.2;Database=AGV_Reporting;..."
+    environment: Prod
+    type: Reporting   # <--- Destination for aggregated data
+
+  # SCENARIO: Development Reporting Database (Target for testing)
+  - name: Report_Dev
+    connectionString: "Server=localhost;Database=AGV_Reporting_Dev;..."
+    environment: Dev
+    type: Reporting
+
+# ==============================================================================
+# 3. JOB SCENARIOS
+# ==============================================================================
+syncJobs:
+
+  # ----------------------------------------------------------------------------
+  # SCENARIO A: Dimension Table Sync (Full Wipe & Replace)
+  # Use Case: Syncing "Product Categories" from Prod to Dev.
+  # Challenge: The table has no TenantID/Date, so we must allow a full table wipe.
+  # ----------------------------------------------------------------------------
+  - name: "Sync-Dimensions-ProdToDev"
+    description: "Refreshes reference data. DESTRUCTIVE: Wipes target table."
+    sourceConnection: Report_Prod
+    targetConnection: Report_Dev
+    
+    parameters: {} # No parameters needed for global dimensions
+
+    tables:
+      - source: dbo.ProductCategories
+        target: dim.ProductCategories
+        enabled: true
+        
+        # 1. Delete everything in target before inserting
+        preSyncTargetAction: true 
+        
+        # 2. REQUIRED SAFETY FLAG: 
+        # Because 'filter' is null, the backend will BLOCK this job unless
+        # allowAllDelete is explicitly set to true.
+        allowAllDelete: true
+        
+        enableIdentityInsert: true
+        filter: null
+
+  # ----------------------------------------------------------------------------
+  # SCENARIO B: Historical Data Sync (Time-Sliced AND Key-Filtered)
+  # Use Case: Copying last week's logs for a specific Customer to Dev.
+  # Challenge: We need to filter by BOTH date range AND CustomerId.
+  # ----------------------------------------------------------------------------
+  - name: "Sync-Logs-LastWeek-Customer50"
+    description: "Copies vehicle logs for a specific date range and customer."
+    sourceConnection: Report_Prod
+    targetConnection: Report_Dev
+
+    # Parameters passed from UI or CLI
+    parameters:
+      StartDate: "2023-10-01"
+      EndDate: "2023-10-07"
+      CustomerId: "50"
+
+    tables:
+      - source: dbo.VehicleLogs
+        target: dbo.VehicleLogs
+        preSyncTargetAction: true
+        allowAllDelete: false 
+        
+        # PROPOSED DESIGN: Composite Filter
+        # Supports simultaneous Date Range AND Key Column filtering.
+        # Logic: WHERE (VehicleHistoryTime BETWEEN X AND Y) AND (CustomerId = Z)
+        filter:
+          # Part 1: Date Range
+          dateColumn: VehicleHistoryTime
+          startDate: "{StartDate}"
+          endDate: "{EndDate}"
+          
+          # Part 2: Key Constraint
+          keyColumn: CustomerId
+          value: "{CustomerId}"
+
+        syncOptions:
+          batchSize: 10000 
+
+  # ----------------------------------------------------------------------------
+  # SCENARIO C: Application -> Reporting (Context Injection)
+  # Use Case: Moving data from a Single-Tenant App DB to a Multi-Tenant Report DB.
+  # Challenge: Source table has no 'CustomerId', but Target requires it.
+  # Logic: Because Source.Type=Application and Target.Type=Reporting,
+  #        SchemaMapper AUTOMATICALLY injects the parameter into the insert.
+  # ----------------------------------------------------------------------------
+  - name: "Ingest-TenantA-Orders"
+    sourceConnection: App_Prod_TenantA
+    targetConnection: Report_Prod
+    
+    parameters:
+      # This value is injected into the 'CustomerId' column on Target
+      CustomerId: 101 
+
+    tables:
+      - source: dbo.Orders
+        target: dbo.Orders
+        preSyncTargetAction: false # Append only (Continuous ingestion scenario)
+        
+        # We assume dbo.Orders in App DB does NOT have CustomerId.
+        # We assume dbo.Orders in Report DB DOES have CustomerId.
+        
+        # Explicit mapping ensures we map columns by name, 
+        # plus the auto-injection handled by the backend logic.
+        columnMapping:
+          automapByName: true
+          
+        # Deduping logic: Don't insert if OrderId + CustomerId already exists
+        keys:
+          businessKey: [OrderId]
+
+  # ----------------------------------------------------------------------------
+  # SCENARIO D: Reporting -> Reporting (Pass-Through)
+  # Use Case: Copying data from Prod Reporting to Dev Reporting.
+  # Logic: Both connections are 'Reporting'. Context Injection is DISABLED.
+  #        The 'CustomerId' column in source is copied as-is to target.
+  # ----------------------------------------------------------------------------
+  - name: "Sync-Reporting-ProdToDev-Filtered"
+    sourceConnection: Report_Prod
+    targetConnection: Report_Dev
+    
+    parameters:
+      TenantToSync: 101
+
+    tables:
+      - source: dbo.Orders
+        target: dbo.Orders
+        preSyncTargetAction: true
+        
+        # We strictly filter by the existing CustomerId column
+        filter:
+          keyColumn: CustomerId
+          value: "{TenantToSync}"
+          
+        columnMapping:
+          automapByName: true
+          # No injection happens here because Source is Type=Reportinge: dbo.HistoricalVehicles
+        target: dbo.HistoricalVehicles
+        preSyncTargetAction: true
+        allowAllDelete: false # Safety: We do NOT want to wipe the whole log table
+        
+        # Filter applies to BOTH the Source Select and the Target Pre-Sync Delete
+        filter:
+          dateColumn: VehicleHistoryTime
+          startDate: "{StartDate}"
+          endDate: "{EndDate}"
+        
+        syncOptions:
+          batchSize: 10000 # Larger batch for log data
+
+  # ----------------------------------------------------------------------------
+  # SCENARIO C: Application -> Reporting (Context Injection)
+  # Use Case: Moving data from a Single-Tenant App DB to a Multi-Tenant Report DB.
+  # Challenge: Source table has no 'CustomerId', but Target requires it.
+  # Logic: Because Source.Type=Application and Target.Type=Reporting,
+  #        SchemaMapper AUTOMATICALLY injects the parameter into the insert.
+  # ----------------------------------------------------------------------------
+  - name: "Ingest-TenantA-Orders"
+    sourceConnection: App_Prod_TenantA
+    targetConnection: Report_Prod
+    
+    parameters:
+      # This value is injected into the 'CustomerId' column on Target
+      CustomerId: 101 
+
+    tables:
+      - source: dbo.Orders
+        target: dbo.Orders
+        preSyncTargetAction: false # Append only (Continuous ingestion scenario)
+        
+        # We assume dbo.Orders in App DB does NOT have CustomerId.
+        # We assume dbo.Orders in Report DB DOES have CustomerId.
+        
+        # Explicit mapping ensures we map columns by name, 
+        # plus the auto-injection handled by the backend logic.
+        columnMapping:
+          automapByName: true
+          
+        # Deduping logic: Don't insert if OrderId + CustomerId already exists
+        keys:
+          businessKey: [OrderId]
+
+  # ----------------------------------------------------------------------------
+  # SCENARIO D: Reporting -> Reporting (Pass-Through)
+  # Use Case: Copying data from Prod Reporting to Dev Reporting.
+  # Logic: Both connections are 'Reporting'. Context Injection is DISABLED.
+  #        The 'CustomerId' column in source is copied as-is to target.
+  # ----------------------------------------------------------------------------
+  - name: "Sync-Reporting-ProdToDev-Filtered"
+    sourceConnection: Report_Prod
+    targetConnection: Report_Dev
+    
+    parameters:
+      TenantToSync: 101
+
+    tables:
+      - source: dbo.Orders
+        target: dbo.Orders
+        preSyncTargetAction: true
+        
+        # We strictly filter by the existing CustomerId column
+        filter:
+          keyColumn: CustomerId
+          value: "{TenantToSync}"
+          
+        columnMapping:
+          automapByName: true
+          # No injection happens here because Source is Type=Reporting
