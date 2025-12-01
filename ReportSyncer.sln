@@ -19,6 +19,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReportSyncer.Core.Tests", "
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{81032739-219D-457C-8C6B-4342748C3BE8}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{57015F2C-FCB8-43CF-AD46-26F7CAB6A8AA}"
+	ProjectSection(SolutionItems) = preProject
+		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\10_Product Requirements Document.Instruction.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\10_Product Requirements Document.Instruction.md
+		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\20_ReportSyncer Backend Architecture.instruction.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\20_ReportSyncer Backend Architecture.instruction.md
+		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\30_ReportSyncer Backend Arch.instruction.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\30_ReportSyncer Backend Arch.instruction.md
+		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\40_Backend Implementation Plan.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\40_Backend Implementation Plan.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
