@@ -1,0 +1,16 @@
+## Test fixture: invalid schema policy value
+# This YAML intentionally uses an invalid value for `schemaPolicy` (enum-like field).
+# The loader should reject unknown enum values and throw ConfigurationException.
+version: '1.0'
+run:
+  dryRun: true
+schemaPolicy: INVALID_POLICY_VALUE
+connections:
+  - name: Src
+    type: Application
+    connectionString: 'Server=(local);Database=Test;Integrated Security=true'
+syncJobs:
+  - name: Job1
+    tables:
+      - source: dbo.SourceTable
+        target: dbo.TargetTable

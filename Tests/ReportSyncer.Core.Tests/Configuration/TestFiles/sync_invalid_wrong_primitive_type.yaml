@@ -1,0 +1,15 @@
+## Test fixture: wrong primitive type
+# This YAML intentionally uses a wrong primitive type for `run.dryRun` (string instead of boolean).
+# The loader should detect the type mismatch and surface a ConfigurationException.
+version: '1.0'
+run:
+  dryRun: "not_a_boolean"
+connections:
+  - name: Src
+    type: Application
+    connectionString: 'Server=(local);Database=Test;Integrated Security=true'
+syncJobs:
+  - name: Job1
+    tables:
+      - source: dbo.SourceTable
+        target: dbo.TargetTable

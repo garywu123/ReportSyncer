@@ -1,0 +1,23 @@
+## Test fixture: unknown nested key
+# This YAML includes an unsupported nested property (`badNestedKey`) under
+# a table entry. The test `LoadAsync_WithUnknownNestedKey_ThrowsConfigurationException`
+# expects the loader to treat this as an invalid configuration and throw
+# `ConfigurationException` rather than ignoring the unknown property.
+version: '1.0'
+run:
+  dryRun: true
+connections:
+  - name: Src
+    type: Application
+    connectionString: 'Server=(local);Database=Test;Integrated Security=true'
+  - name: Tgt
+    type: Application
+    connectionString: 'Server=(local);Database=Test;Integrated Security=true'
+syncJobs:
+  - name: Job1
+    tables:
+      - source: dbo.Source
+        target: dbo.Target
+
+        # Unknown nested key under table that should cause loader to fail
+        badNestedKey: oops

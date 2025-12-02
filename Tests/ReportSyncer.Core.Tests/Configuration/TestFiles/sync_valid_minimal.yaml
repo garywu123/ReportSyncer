@@ -1,0 +1,36 @@
+## Test file: sync_valid_minimal.yaml
+## Purpose: Minimal valid YAML configuration used by unit tests to verify
+## the basic YAML -> domain mapping in `YamlConfigurationLoader`.
+## Contains one sync job, two connections, and minimal run/safety/schema settings.
+version: "1.0"
+run:
+  dryRun: true
+  defaultBatchSize: 1000
+  deleteChunkSize: 500
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: true
+  requireDifferentConnections: true
+  confirmLargeDeletePct: 0.25
+schemaPolicy:
+  onMismatch: "Warn"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: false
+connections:
+  - name: "SrcDB_Dev"
+    connectionString: "Server=.;Database=Src;Integrated Security=true;"
+    environment: "Dev"
+    type: "Application"
+  - name: "TgtDB_Dev"
+    connectionString: "Server=.;Database=Tgt;Integrated Security=true;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "Job1"
+    description: "Minimal sync job"
+    sourceConnection: "SrcDB_Dev"
+    targetConnection: "TgtDB_Dev"
+    tables:
+      - source: "dbo.SourceTable"
+        target: "dbo.TargetTable"
+        enabled: true

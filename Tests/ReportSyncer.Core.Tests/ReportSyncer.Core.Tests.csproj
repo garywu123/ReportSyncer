@@ -17,7 +17,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Reference projects directly so tests build against the current source projects. -->
+    <ProjectReference Include="..\..\ReportSyncer.Core\ReportSyncer.Core.csproj" />
+    <ProjectReference Include="..\..\..\DotNetToolkit\DotNetToolkit.Logging\DotNetToolkit.Logging.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ensure YAML test files are copied to the test output so tests can read them by path -->
+    <None Include="Configuration\TestFiles\**\*.yaml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

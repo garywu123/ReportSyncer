@@ -1,0 +1,69 @@
+## Test file: sync_valid_full.yaml
+## Purpose: Full-example YAML configuration used by unit tests to validate
+## comprehensive mapping behavior in `YamlConfigurationLoader`.
+## Contains multiple connections, parameters, tables, filters, column mappings,
+## keys, and sync options to exercise mapping logic thoroughly.
+version: "1.2"
+run:
+  dryRun: false
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+  etaSmoothing: 0.05
+safety:
+  forbidProdToProd: true
+  requireDifferentConnections: true
+  confirmLargeDeletePct: 0.10
+schemaPolicy:
+  onMismatch: "Fail"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: true
+connections:
+  - name: "SrcDB_Prod"
+    connectionString: "Server=prodserver;Database=Src;User Id=sa;Password=Pass;"
+    environment: "Prod"
+    type: "Application"
+  - name: "TgtDB_Staging"
+    connectionString: "Server=stg;Database=Tgt;User Id=sa;Password=Pass;"
+    environment: "Staging"
+    type: "Reporting"
+syncJobs:
+  - name: "FullJob"
+    description: "A full example job with parameters, multiple tables and mappings"
+    sourceConnection: "SrcDB_Prod"
+    targetConnection: "TgtDB_Staging"
+    parameters:
+      CustomerId: "42"
+      StartDate: "2025-01-01"
+    tables:
+      - source: "dbo.Orders"
+        target: "dbo.Orders_Tgt"
+        enabled: true
+        preSyncTargetAction: false
+        allowAllDelete: false
+        enableIdentityInsert: true
+        filter:
+          dateColumn: "OrderDate"
+          startDate: "2025-01-01"
+          endDate: "2025-12-31"
+        columnMapping:
+          automapByName: true
+          explicitMappings:
+            OrderId: "OrderId"
+            CustomerRef: "CustomerId"
+          addedColumns:
+            - columnName: "SourceSystem"
+              value: "ERP"
+        keys:
+          businessKey: ["OrderId"]
+        syncOptions:
+          batchSize: 250
+          useTvp: true
+      - source: "dbo.OrderLines"
+        target: "dbo.OrderLines_Tgt"
+        enabled: true
+        preSyncTargetAction: false
+        allowAllDelete: false
+        enableIdentityInsert: false
+        keys:
+          businessKey: ["OrderLineId"]

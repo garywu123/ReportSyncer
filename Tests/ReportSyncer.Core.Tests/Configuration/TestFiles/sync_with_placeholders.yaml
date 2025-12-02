@@ -1,0 +1,41 @@
+## Test fixture: placeholders in parameters and filters
+# This YAML verifies that parameter placeholders are preserved in the loaded model
+# rather than being resolved or removed by the loader.
+version: '1.0'
+run:
+  dryRun: true
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+  etaSmoothing: 0.05
+safety:
+  forbidProdToProd: false
+  requireDifferentConnections: true
+  confirmLargeDeletePct: 0.1
+schemaPolicy:
+  onMismatch: Ignore
+  requirePrimaryKey: true
+  allowExtraTargetColumns: false
+connections:
+  - name: Src
+    type: Application
+    environment: Dev
+    connectionString: 'Server=(local);Database=Src;Integrated Security=true'
+  - name: Tgt
+    type: Application
+    environment: Dev
+    connectionString: 'Server=(local);Database=Tgt;Integrated Security=true'
+syncJobs:
+  - name: JobWithPlaceholders
+    sourceConnection: Src
+    targetConnection: Tgt
+    parameters:
+      StartDate: "{StartDate}"
+      CustomerId: "{CustomerId}"
+    tables:
+      - source: dbo.Orders
+        target: dbo.Orders_Tgt
+        filter:
+          dateColumn: OrderDate
+          startDate: "{StartDate}"
+          endDate: "{EndDate}"

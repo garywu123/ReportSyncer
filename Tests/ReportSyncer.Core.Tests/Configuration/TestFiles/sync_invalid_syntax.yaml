@@ -1,0 +1,17 @@
+## Test fixture: invalid YAML syntax
+# This file intentionally contains malformed YAML to trigger a parse error.
+# The loader should convert parser errors into ConfigurationException.
+version: '1.0'
+run:
+  dryRun: true
+connections:
+  - name: Src
+    type: Application
+    connectionString: 'Server=(local);Database=Test;Integrated Security=true'
+syncJobs:
+  - name: Job1
+    tables:
+      - source: dbo.SourceTable
+        target: dbo.TargetTable
+        # malformed sequence below (missing dash or bad indentation)
+        - this: is: invalid: yaml
