@@ -31,6 +31,10 @@
     <None Include="Configuration\TestFiles\**\*.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- Ensure YAML test files are copied to the test output so tests can read them by path -->
+    <None Include="Configuration\TestFiles\**\*.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

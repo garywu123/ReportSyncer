@@ -1,9 +1,11 @@
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Tests.Testing;
+using Xunit;
 
 namespace ReportSyncer.Core.Tests.Configuration;
 
-public class YamlConfigurationLoaderTests
+[Trait("Category","Unit")]
+public class YamlConfigurationLoaderUnitTests
 {
     private static string GetTestFilePath(string fileName)
     {
