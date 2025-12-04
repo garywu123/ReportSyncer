@@ -1,17 +1,17 @@
 {
   "output": {
-    "filePath": "c:\\Users\\GWu\\source\\ReportSyncer\\repomix-output.xml",
+    "filePath": "c:\\Users\\GWu\\source\\ReportSyncer\\.repomix\\output\\",
     "style": "xml",
     "parsableStyle": false,
     "headerText": "",
     "instructionFilePath": "",
     "fileSummary": true,
     "directoryStructure": true,
-    "removeComments": false,
+    "removeComments": true,
     "removeEmptyLines": true,
     "topFilesLength": 5,
     "showLineNumbers": false,
-    "copyToClipboard": true,
+    "copyToClipboard": false,
     "includeEmptyDirectories": false,
     "compress": true
   },
