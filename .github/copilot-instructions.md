@@ -110,6 +110,7 @@ Overall: treat the docs as a frozen spec. Your job is to implement, refine, or e
 	2. Project: ReportSyncer
 	3. Date: Today's date.
 3. Different purpose of documentation should be inside the related XML tag. For example, the code example should be in a code, and if any warning or note is needed, it should be inside the related tag.
+	> Only the tool library type of projects should have the code segment in the XML doc.
 	1. Wrap your code in a `CDATA` section inside `<code>`
 	2. Use `<remarks>` for additional information about the method or class.
 	3. Use `<example>` for code examples. 
