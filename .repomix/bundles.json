@@ -1,0 +1,19 @@
+{
+  "bundles": {
+    "configuration-974": {
+      "name": "configuration",
+      "created": "2025-12-04T09:03:14.337Z",
+      "lastUsed": "2025-12-04T09:03:14.337Z",
+      "tags": [],
+      "files": [
+        "ReportSyncer.Core/Configuration",
+        "Tests/ReportSyncer.Core.Tests/Configuration",
+        "Tests/ReportSyncer.Core.Tests/ReportSyncer.Core.Tests.csproj",
+        "Tests/ReportSyncer.Core.Tests/Testing",
+        "ReportSyncer.Core/ReportSyncer.Core.csproj",
+        "ReportSyncer.sln"
+      ],
+      "configPath": ".repomix/config/configuration-repomix.config.json"
+    }
+  }
+}
