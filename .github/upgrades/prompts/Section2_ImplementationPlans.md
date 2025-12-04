@@ -1,588 +1,701 @@
-# Section 2 (Revised): Configuration & Error Model – Implementation Plan
+**Reference Documents:**
 
-### 2.0 Shared Background for AI Coder (Read This First)
+- `10_Product Requirements Document (PRD).instruction.md` (Product Behavior)
+- `30_ReportSyncer Backend Arch.instruction.md` (Architecture, Classes, Interfaces)
+- `20_ReportSyncer Backend Project Instruction.instruction.md` (Project General Arch)
 
-This section is self-contained on purpose. It gives you the business context, YAML shape, safety rules, and architecture contracts you must respect while implementing `ReportSyncer.Core.Configuration` and the configuration error model. You should not need to open other docs.
+## Section 1: DotNetToolkit – Hardening & NuGet Packaging
 
-#### 2.0.1 Product & Business Goal
+**Project focus:**
 
-* **Product:** ReportSyncer is a desktop tool that performs **on-demand, manual data syncs between SQL Server databases** for the AGV BI environment. It is not a continuous replication service. 
-* **Core business goal:** Allow users to refresh dimension tables and historical reporting tables from a source environment (often Production) into target environments (Dev / Test / other Reporting DBs) with **strict safety guardrails**:
+- `DotNetToolkit.General` (Guard, Result, general helpers)
+    
+- `DotNetToolkit.Logging` (ILogService + Serilog adapter)
+    
+- `DotNetToolkit.Database` (IDbContext, IDbConnectionFactory, IDbCommandWrapper, IDataMapper, DbContext, DbCommandWrapper, ReflectionDataMapper, DI extensions)
+    
 
-  * Source is **read-only**: no `DELETE/UPDATE/TRUNCATE/DROP` against any connection marked as *Source*.
-  * Target deletions are **pre-sync, controlled, and heavily guarded**. 
-* **Typical scenarios:**
-
-  * Full refresh of dimension tables (wipe target + insert fresh data).
-  * Historical data sync for a time window (e.g., last 7 days) with filters.
-  * Application DB → Reporting DB ingestion with **context injection** (e.g., inject `CustomerId` into Reporting table).
-  * Reporting → Reporting copy (Prod → Dev) with filters and no extra context injection.
-
-Your config model and validation are the gatekeepers that make these scenarios **safe** and **predictable**.
-
-#### 2.0.2 YAML Configuration Shape (What You’re Modeling)
-
-The entire backend behavior is driven by a **single YAML configuration file**. The logical entities are:
-
-1. **Run settings (`run`)**
-
-   * Examples: `dryRun`, `defaultBatchSize`, `deleteChunkSize`, `useTvpIfAvailable`, `etaSmoothing`.
-2. **Global safety settings (`safety`)**
-
-   * Examples:
-
-     * `forbidProdToProd`
-     * `requireDifferentConnections`
-     * `confirmLargeDeletePct` (e.g., 0.8 for 80% threshold)
-3. **Schema policy (`schemaPolicy`)**
-
-   * Examples:
-
-     * `onMismatch` (`fail`, `warn`, etc.)
-     * `requirePrimaryKey`
-     * `allowExtraTargetColumns`
-4. **Connections (`connections`)**
-
-   * Each connection has at least:
-
-     * `name` (unique key used by jobs)
-     * `connectionString`
-     * `environment` (e.g., `Prod`, `Dev`)
-     * `type` (`Application` or `Reporting`) used for context-injection rules.
-5. **Sync jobs (`syncJobs`)**
-
-   * Each job has:
-
-     * `name` and optional `description`
-     * `sourceConnection`, `targetConnection` (referencing `connections`)
-     * `parameters` dictionary (e.g., `CustomerId`, `StartDate`, `EndDate`)
-     * `tables`: list of **table tasks**
-6. **Table task (`tables[]`)**
-
-   * Per-table configuration:
-
-     * `source` table name
-     * `target` table name
-     * `enabled` flag
-     * `preSyncTargetAction` (boolean or enum-like, e.g., “delete before insert”)
-     * `allowAllDelete` (safety latch for unscoped deletes)
-     * `enableIdentityInsert`
-     * `filter` block (time range and/or key filter)
-     * `columnMapping` (automap, explicit mappings, added parameter columns)
-     * `keys` (business key configuration)
-     * `syncOptions` (batch size, TVP usage overrides, etc.)
-
-A canonical YAML example (cut for brevity) looks like: 
-
-* `run` / `safety` / `schemaPolicy` at the top
-* `connections:` list with `environment` and `type`
-* `syncJobs:` each with `parameters` and `tables`, where each table has `preSyncTargetAction`, `allowAllDelete`, `filter`, `columnMapping`, etc.
-
-Your `SyncConfiguration` root model must be able to represent all of this, strongly typed.
-
-#### 2.0.3 Safety Rules You Must Enforce (Static Side)
-
-Config & validation are responsible for the **static rules** that can be checked without touching the DB:
-
-* **No Prod → Prod sync** if `forbidProdToProd == true`.
-* **No self-sync** if source and target connections resolve to the same DB or connection string.
-* **Source immutability**: configs must never define a scenario where source is mutated; all delete options apply only to the target.
-* **Pre-sync delete guardrails:**
-
-  * If `preSyncTargetAction == true` and `filter == null`, **block the config** unless `allowAllDelete == true`.
-  * `allowAllDelete` defaults to **false**.
-* **Large delete threshold (`confirmLargeDeletePct`)**
-
-  * When estimated deletes > threshold, the system must require explicit confirmation / safety override. The config validation + later safety layer coordinate this.
-* **Context injection invariants:**
-
-  * If `Source.Type == Application` and `Target.Type == Reporting`:
-
-    * The system will **inject a context column** (default `CustomerId`, configurable per job) into the target insert set, using a job parameter (e.g. `CustomerId: 50`).
-    * If the source table already contains a column with the same name as the configured context column, this is **ambiguous** and must fail validation / pre-flight with an “Ambiguous Context Column” style error.
-  * If `Source.Type == Reporting`:
-
-    * No automatic context-injection; `CustomerId` is treated like any normal column unless config explicitly adds a constant column mapping.
-
-Your config validator will not compute row counts or look at actual DB schema, but it **must** enforce all rules that can be derived purely from YAML + parameters.
-
-#### 2.0.4 Architecture & Layering Constraints (Where Your Code Lives)
-
-* **Project:** `ReportSyncer.Core` is the domain core. Configuration models, YAML loading, config validation, and config-level error types all live under the `ReportSyncer.Core.Configuration` (and related error namespaces). 
-* **Toolkits:**
-
-  * `DotNetToolkit.General`: generic helpers (`Guard`, `Result<T>`) you may use.
-  * `DotNetToolkit.Logging`: logging abstraction `ILogService`.
-  * `DotNetToolkit.Database`: generic DB primitives; **do not** call it from configuration code (config has no DB access). 
-* **Hosts:** `ReportSyncer.Console` and future `ReportSyncer.WebApi` are just shells:
-
-  * They resolve config file paths, wire DI, invoke configuration loader and orchestrator, and map exceptions to exit codes / HTTP responses.
-  * They **must not** contain YAML parsing or config validation logic.
-
-Your configuration code must:
-
-* Depend only on:
-
-  * `DotNetToolkit.General`
-  * `DotNetToolkit.Logging`
-  * `YamlDotNet`
-* Never:
-
-  * Access DB or schema.
-
-  * Depend on host projects.
-
-  * Depend on `DotNetToolkit.Database`.
-
-#### 2.0.5 Error Model You Plug Into
-
-The core domain error taxonomy is:
-
-* `ConfigurationException`
-* `SchemaMismatchException`
-* `SafetyViolationException`
-* `SyncExecutionException`
-* `UserCancelledException` (and an optional `UnexpectedInternalException` at host edge).
-
-For **Section 2**:
-
-* Config loading, parsing, and structural validation must throw **`ConfigurationException`** on:
-
-  * YAML syntax errors.
-  * Missing required fields.
-  * Invalid enum values.
-  * Broken references (unknown connection names, etc.).
-* Safety rules that are purely config-driven may raise:
-
-  * `ConfigurationException` **or**
-  * `SafetyViolationException` depending on final design of your configuration error model (Task 2.5 clarifies the contract).
-* All config-related errors must be **recognizable as configuration errors** so hosts can map them to specific exit codes / HTTP status.
-
-Section 2’s tasks below define exactly how to build:
-
-* The **configuration domain model** (strongly typed).
-* The **loader** (YAML → domain model).
-* The **validator** (semantic static rules).
-* The **override / effective config** layer.
-* The **configuration error abstraction** and mapping contract.
-
-This section assumes Section 1 (DotNetToolkit) already exists as a separate infra library and is **only consumed**, never modified here. 
-
----
-
-### Namespace focus: `ReportSyncer.Core.Configuration` (+ shared domain error types)
-
-Important note in light of Section 1:
-
-* This section **uses** toolkit projects (`DotNetToolkit.General`, `DotNetToolkit.Logging`, `DotNetToolkit.Database` where appropriate) but **must not** push any domain logic down into them. All config & error semantics stay in `ReportSyncer.Core`. 
+**High-level goal**  
+Turn DotNetToolkit into a clean, domain-agnostic infra library, packaged as NuGet(s), that ReportSyncer.Core consumes but never pollutes with sync-specific logic. This must obey the strict rules that `DotNetToolkit.*` never depends on `ReportSyncer.*` and stays reusable.
 
 ### Global principles for this section
 
-* AI coder **may**:
+- AI coder **must**:
+    
+    - Treat `DotNetToolkit.*` as **domain-agnostic infra**:
+        
+        - No mention of ReportSyncer, AGV, sync jobs, safety flags, YAML, etc. in public API or internals.
+            
+    - Keep technology stack within:
+        
+        - `Microsoft.Extensions.*`, `Microsoft.Data.SqlClient` in Database.
+            
+        - No EF, no ORMs, no Dapper in toolkit.
+            
+    - Design the public APIs so they can be consumed by any .NET 9 app, not just ReportSyncer.
+        
+- AI coder **may**:
+    
+    - Add small helper types (retry, tiny functional helpers) if they are generic.
+        
+    - Adjust class names & namespaces slightly to improve clarity, as long as:
+        
+        - No breaking change to what ReportSyncer will need (IDbContext, IDbCommandWrapper semantics, etc. match the backend architecture docs).
+            
+- AI coder **must not**:
+    
+    - Introduce any dependency on:
+        
+        - `ReportSyncer.Core`, `ReportSyncer.Console`, `ReportSyncer.WebApi` or domain exception types.
+            
+    - Implement sync-specific SQL (TableTask, preSyncTargetAction, identity insert policy, safety rules) in `DotNetToolkit.Database`. Those belong in `ReportSyncer.Core.Sync`.
+        
 
-  * Introduce helper classes, extension methods, small patterns (factory, value objects, etc.).
-  * Add derived safety checks or convenience methods if consistent with the PRD & architecture doc.
-* AI coder **must not**:
+---
 
-  * Bypass the validation layer and use raw YAML objects in sync logic.
-  * Put DB access, logging, or orchestration in this namespace.
-  * Push configuration error types into `DotNetToolkit.*`; domain exceptions live in `ReportSyncer.Core` only.
-* AI coder **must**:
+### Task 1.1 – Finalize DotNetToolkit.General (Guard & Result)
 
-  * Respect:
+**Goal**  
+Stabilize `DotNetToolkit.General` as a small, boring but solid general-utilities library:
+- Guard helpers for argument validation.
+- A simple `Result<T>` type for generic operations where ReportSyncer (and others) may want to avoid exceptions in some cases.
 
-    * PRD: config structure, safety rules, delete behavior, environment rules, context injection rules.
-    * Backend architecture doc: configuration responsibility, layering rules, and exception taxonomy. 
+**Inputs**
+- Source files:
+    - `DotNetToolkit.General/Guard.cs`
+    - `DotNetToolkit.General/Result.cs`
+- Backend architecture docs for allowed toolkit responsibilities.
+    
+**What must be implemented**
+
+- Review and finalize:
+    - `Guard.NotNull`, `Guard.NotNullOrEmpty`:
+        - Ensure consistent exception types (`ArgumentNullException`, `ArgumentException`) and parameter naming.
+    - `Result<T>`:
+        - Keep `Ok` / `Fail` factory methods.
+        - Ensure it is immutable from consumers’ perspective.
+- Add minimal additional helpers only if they’re truly generic:
+    - Example: `Guard.InRange`, `Guard.NotDefault<T>`, etc., **only** if they don’t encode ReportSyncer rules.
+
+**Constraints & freedom**
+- No extra dependencies; `DotNetToolkit.General` must stay ultra-lean.
+- Do **not** add any logging, configuration or DB awareness here.
+    
+
+**Expected behavior / tests**
+- Unit tests in `DotNetToolkit.Tests`:
+    - `Guard_NotNull_WithNull_ThrowsArgumentNullException`
+    - `Result_Ok_IsSuccessTrueAndValueSet`
+    - `Result_Fail_IsSuccessFalseAndErrorSet`
+
+---
+
+### Task 1.2 – DotNetToolkit.Logging: ILogService + Serilog Adapter
+
+**Goal**  
+Provide a clean logging abstraction (`ILogService`) plus a Serilog-backed implementation, suitable for any app, including ReportSyncer.
+
+**Inputs**
+
+- `DotNetToolkit.Logging/ILogService.cs` and project file.
+- Backend docs for logging requirements:
+    - Core depends on `DotNetToolkit.Logging.ILogService`, hosts wire Serilog.
+        
+
+**What must be implemented**
+- Implement `SerilogLogService` (name can vary slightly) that:
+    - Wraps a Serilog `ILogger` instance.
+    - Implements all `ILogService` sync/async methods:
+        - `LogVerbose`, `LogDebug`, `LogInformation`, `LogWarning`, `LogError`, `LogCritical` (+ async equivalents).
+- Add DI registration helper:
+    - E.g. `LoggingServiceCollectionExtensions.AddSerilogLogService(this IServiceCollection services, ILogger serilogLogger)`.
+- Ensure logging abstraction remains generic (no domain terms).
+    
+
+**Constraints & freedom**
+- `DotNetToolkit.Logging` may reference Serilog packages (as allowed infra), but cannot reference ReportSyncer types.
+- Do not bake any file paths, config keys or environment logic inside the library; hosts decide.
+    
+**Expected behavior / tests**
+- Unit tests with a fake Serilog logger:
+    - Verify each `ILogService` method calls the correct Serilog level.
+- Confirm ReportSyncer can depend **only** on `ILogService` without knowing Serilog exists.
+    
+
+---
+
+### Task 1.3 – DotNetToolkit.Database: Abstractions & Implementations
+
+**Goal**  
+Harden `DotNetToolkit.Database` as the canonical low-level data-access abstraction:
+- Stable interfaces: `IDbConnectionFactory`, `IDbContext`, `IDbCommandWrapper`, `IDataMapper<T>`.
+- SQL Server implementation using `Microsoft.Data.SqlClient` only.
+    
+
+**Inputs**
+- Repo files:
+    - `Abstractions/*.cs` (`IDbContext`, `IDbConnectionFactory`, `IDbCommandWrapper`, `IDataMapper<T>`)
+    - `Configuration/DatabaseSettings.cs`
+    - `Internal/DbCommandWrapper.cs`, `Internal/ReflectionDataMapper.cs`
+    - `Services/DbConnectionFactory.cs`, `Services/DbContext.cs`
+    - `Extensions/DatabaseServiceCollectionExtensions.cs`
+- Backend architecture stating `DotNetToolkit.Database` responsibilities & constraints.
+    
+
+**What must be implemented / fixed**
+
+1. **Align interfaces & implementations**
+    - Ensure `IDbConnectionFactory.CreateConnectionAsync(...)` is implemented in `DbConnectionFactory` consistent with `CreateConnection()`:
+        - Use `SqlConnection` from `Microsoft.Data.SqlClient`.
+        - Open connection asynchronously when requested.
+    - Ensure `IDbContext` implementation (`DbContext`) consistently:
+        - Uses the factory.
+        - Sets `CommandTimeout` from `DatabaseSettings.CommandTimeoutSeconds`.
+            
+2. **DbCommandWrapper robustness**
+    
+    - Ensure `DbCommandWrapper`:
+        
+        - Always creates parameters via `DbProviderFactory`.
+            
+        - Correctly sets `DbType`, `Direction`, null handling, and conversion on `GetParameterValue<T>`.
+            
+3. **ReflectionDataMapper**
+    
+    - Make sure mapping:
+        
+        - Resolves properties case-insensitively (already implemented).
+            
+        - Safely skips unmapped columns.
+            
+    - No domain logic, just “column name → property name” mapping.
+        
+4. **DatabaseSettings & provider selection**
+    
+    - Confirm `DatabaseSettings` only has:
+        
+        - `ConnectionString`, `ProviderName`, `CommandTimeoutSeconds`.
+            
+    - Keep provider support constrained:
+        
+        - For now, support only `Microsoft.Data.SqlClient` (as your stack requires).
+            
+
+**Constraints & freedom**
+
+- No ReportSyncer-specific SQL allowed here:
+    
+    - No `TableTask`, no delete policies, no context column, no identity insert rules.
+        
+- All async methods must accept `CancellationToken` properly but must **not** throw domain-specific exceptions; only generic .NET exceptions.
+    
+
+**Expected behavior / tests**
+
+- **Unit tests**:
+    
+    - `DbCommandWrapper_AddParameter_StoresParameterWithCorrectTypeAndDirection`.
+        
+    - `ReflectionDataMapper_MapsColumnsToProperties_IgnoringCase`.
+        
+- **Integration tests** against LocalDB or test SQL Server:
+    
+    - `DbConnectionFactory_CreateConnection_ConnectsWithConfiguredConnectionString`.
+        
+    - `DbContext_ExecuteNonQueryAsync_ExecutesCommand`.
+        
+    - `DbContext_ExecuteQueryAsync_MapsRowsToObjectsUsingReflectionDataMapper`.
+        
+
+---
+
+### Task 1.4 – DI Extensions & Multi-project Consumption
+
+**Goal**  
+Provide clean DI hooks so any host (ReportSyncer.Console, ReportSyncer.WebApi, or other apps) can register toolkit services via `Microsoft.Extensions.DependencyInjection`.
+
+**Inputs**
+
+- `DotNetToolkit.Database/Extensions/DatabaseServiceCollectionExtensions.cs`
+    
+- Logging plan from Task 1.2.
+    
+
+**What must be implemented**
+
+- Validate and, if needed, refine `AddDatabaseServices`:
+    
+    - Binds `DatabaseSettings` from configuration section.
+        
+    - Registers:
+        
+        - `IDbConnectionFactory` as singleton.
+            
+        - `IDbContext` as scoped.
+            
+        - `IDataMapper<>` as transient (ReflectionDataMapper).
+            
+- Optionally add parallel DI helpers for Logging:
+    
+    - `AddLoggingServices` to wire `ILogService` to Serilog adapter.
+        
+
+**Constraints & freedom**
+
+- Keep extension methods in toolkit projects, not in ReportSyncer projects.
+    
+- Do not assume any specific configuration keys beyond logically named sections (e.g. `"DatabaseSettings"` here is acceptable, but no “ReportSyncer” naming).
+    
+
+**Expected behavior / tests**
+
+- Unit tests with a dummy `IConfiguration`:
+    
+    - `AddDatabaseServices_BindsDatabaseSettingsAndRegistersServices`.
+        
+- Sanity integration test:
+    
+    - Build a `ServiceProvider`, resolve `IDbContext` and run a trivial select.
+        
+
+---
+
+### Task 1.5 – Test Project & NuGet Packaging
+
+**Goal**  
+Make DotNetToolkit a “real” library: tested and packable.
+
+**Inputs**
+- `Tests/DotNetToolkit.Tests` project.
+- Tech stack & testing libraries (`xUnit`, etc.) from architecture docs.
+    
+**What must be implemented**
+- Expand `DotNetToolkit.Tests`:
+    - Organize tests into folders/namespaces:
+        - `General`, `Logging`, `Database.Unit`, `Database.Integration`.
+- Add basic integration test infra for SQL:
+    - Connection string configuration for LocalDB / dev SQL.
+    - Fixtures to set up and tear down simple test tables.
+        
+- Update each `.csproj` for toolkit projects:
+    - Fill in `PackageId`, `Authors`, `Description`, `RepositoryUrl`.
+    - Configure `GeneratePackageOnBuild` or create a shared pack script.
+        
+- Ensure versioning scheme is clear (e.g. 0.1.x pre-release) and not tied to ReportSyncer version directly.
+    
+**Constraints & freedom**
+- Packaging is **library**-level:
+    - No dependency from toolkit `.csproj` to ReportSyncer projects.
+- Tests may reference any test library (`xUnit`, `FluentAssertions`, `Moq`), but these stay in test project only.
+    
+
+**Expected behavior / tests**
+- `dotnet test` on DotNetToolkit.Tests passes.
+- `dotnet pack` on toolkit projects produces `.nupkg` files with correct metadata.
+- ReportSyncer solution can reference the projects directly **or** consume the NuGet packages without API changes.
+    
+
+---
+
+## Section 2 (Revised): Configuration & Error Model – Implementation Plan
+
+Namespace focus: `ReportSyncer.Core.Configuration` (+ shared domain error types)
+
+Important note in light of Section 1:
+
+- This section **uses** toolkit projects (`DotNetToolkit.General`, `DotNetToolkit.Logging`, `DotNetToolkit.Database` where appropriate) but **must not** push any domain logic down into them. All config & error semantics stay in `ReportSyncer.Core`.
+    
+
+### Global principles for this section
+
+- AI coder **may**:
+    
+    - Introduce helper classes, extension methods, small patterns (factory, value objects, etc.).
+    - Add derived safety checks or convenience methods if consistent with the PRD & architecture doc.
+        
+- AI coder **must not**:
+    - Bypass the validation layer and use raw YAML objects in sync logic.
+    - Put DB access, logging, or orchestration in this namespace.
+    - Push configuration error types into `DotNetToolkit.*`; domain exceptions live in `ReportSyncer.Core` only.
+        
+- AI coder **must**:
+    - Read and respect:
+        - PRD: config structure, safety rules, delete behavior, environment rules.
+        - Backend architecture doc: configuration responsibility, layering rules, and exception taxonomy.
+            
+_(Everything below is your existing Section 2 content, kept intact in meaning; I’m not rewriting the world, just making it fit the new DotNetToolkit split.)_
 
 ---
 
 ### Task 2.1 – Define the Configuration Domain Model
 
-**Goal**
+**Goal**  
 Represent the YAML configuration as a strongly-typed, immutable-ish domain model that:
+- Captures run settings, safety rules, DB connections, sync jobs, table tasks, and filters.
+- Is expressive enough to support all behaviors in the PRD, including safety features around deletes and prod/prod scenarios.
+    
 
-* Captures run settings, safety rules, schema policy, DB connections, sync jobs, table tasks, filters, and mapping.
-* Is expressive enough to support all behaviors in the PRD, including:
-
-  * Safety features around deletes and prod/prod scenarios.
-  * Context injection between Application → Reporting.
-  * Filter combinations (date range + key filters).
-
-**What this task focuses on (business view)**
-
-* Make the YAML config *understandable to code*:
-
-  * One root object representing the entire YAML file (e.g., `SyncConfiguration`).
-  * Sub-models for `RunConfig`, `SafetyConfig`, `SchemaPolicyConfig`, `ConnectionConfig`, `SyncJobConfig`, `TableTaskConfig`, `FilterConfig`, `ColumnMappingConfig`, `SyncOptionsConfig`, `KeyConfig`, etc.
-* The models must be good enough that later modules (schema, safety, sync) never need to touch raw YAML.
-
-**Inputs**
-
-* PRD sections describing:
-
-  * YAML structure and semantics.
-  * Safety and environment rules.
-  * Context injection rules.
-* Backend architecture doc:
-
-  * Class & interface inventory for `ReportSyncer.Core.Configuration`.
-  * How other modules expect to consume the config models. 
-
+**Inputs (docs to read first)**
+- PRD: sections describing:
+    - The YAML structure (root config, connections, sync jobs, table-level options).
+    - Safety options (forbid prod→prod, large delete thresholds, allow-all-delete style flags).
+        
+- Backend architecture doc:
+    - Configuration responsibilities & layering.
+    - Exception taxonomy (how `ConfigurationException` fits in).
+        
 **What must be implemented**
-
-* A **root configuration object** (e.g. `SyncConfiguration`) representing the whole YAML file:
-
-  * Holds:
-
-    * `RunConfig` (global runtime options like dry-run, batch sizes, chunk sizes).
-    * `SafetyConfig` (forbidProdToProd, requireDifferentConnections, confirmLargeDeletePct).
-    * `SchemaPolicyConfig`.
-    * A list of `ConnectionConfig`.
-    * A list of `SyncJobConfig`, each with table-level instructions.
-* Job-level and table-level configuration objects that:
-
-  * Identify which source/target connections to use.
-  * Identify source and target tables.
-  * Capture pre-sync actions (`preSyncTargetAction`, `allowAllDelete`, `enableIdentityInsert`).
-  * Capture filters (`FilterConfig`) combining:
-
-    * Optional date range (`dateColumn`, `startDate`, `endDate`).
-    * Optional key filter (`keyColumn`, `value`).
-  * Capture table-level overrides (`SyncOptionsConfig`) and mapping (`ColumnMappingConfig`, `AddedColumnMappingConfig`).
-* Connection configuration objects that:
-
-  * Represent named connections.
-  * Include `environment` (Prod/Dev/etc.) and `type` (Application/Reporting) to drive safety and context injection rules.
-* Mapping models:
-
-  * `ColumnMappingConfig` & `AddedColumnMappingConfig` to encode:
-
-    * Automap by name.
-    * Explicit column mappings.
-    * Constant / parameter-based injected columns (e.g. context column).
-* Key configuration models:
-
-  * `KeyConfig` for business keys / composite keys used by dedupe / `WHERE NOT EXISTS` patterns.
+- A **root configuration object** representing the whole YAML file:
+    - Holds:
+        - Runtime options (dry-run, batch sizes, etc.).
+        - Safety-related settings.
+        - A list of connections.
+        - A list of sync jobs, each with table-level instructions.
+- Job-level and table-level configuration objects that:
+    - Identify which source/target connections to use.
+        
+    - Identify source and target tables.
+        
+    - Capture pre-sync actions (like delete target / filter-based delete).
+        
+    - Capture any filters or context-related hints needed by schema/mapping.
+        
+- Connection configuration objects that:
+    
+    - Represent named connections.
+        
+    - Carry environment information (Prod/Dev/etc.).
+        
+    - Indicate DB type so later layers can pick appropriate providers (Application vs Reporting).
+        
+- Filter-related objects that:
+    
+    - Represent column filters in a structured way (column, operator, value(s)), not raw string SQL.
+        
+- A single, central place in this section for **config-related domain types**, not scattered across sync & infra.
+    
 
 **Constraints & freedom**
 
-* Structures must align logically with YAML examples but:
-
-  * You may introduce intermediate value objects / enums to improve clarity and safety.
-  * Naming can be adjusted if it better expresses intent, as long as YAML mapping stays aligned.
-* Domain models should be mostly immutable from the outside:
-
-  * Use constructors / factory methods for invariants where appropriate.
+- Structures must align logically with YAML examples in the PRD but:
+    
+    - AI coder can introduce intermediate types (e.g. value objects, enums, wrapper types) to improve clarity and safety.
+        
+    - Names can be slightly adjusted if they better express the intent, as long as docs & YAML are respected.
+        
 
 **Expected behavior / tests (concept level)**
 
-* Given a valid YAML (per spec), the domain model can represent:
-
-  * Multiple connections with different envs and types.
-  * Multiple jobs with multiple tables.
-  * Per-table safety / pre-sync behavior where applicable.
-* Creating configuration objects with obviously invalid state (e.g. empty names, missing required parts) is either:
-
-  * Prevented by type design, or
-  * Reliably caught by validation (Task 2.3).
+- Given a valid YAML (per PRD), the domain model can represent:
+    
+    - Multiple connections with different envs.
+        
+    - Multiple jobs with multiple tables.
+        
+    - Per-table safety / pre-sync behavior where applicable.
+        
+- Creating configuration objects with obviously invalid state (e.g. empty names, missing required parts) is either:
+    
+    - Prevented by type design, or
+        
+    - Reliably caught by validation (Task 2.3).
+        
 
 ---
 
 ### Task 2.2 – Implement Configuration Loading (YAML → Domain)
 
-**Goal**
+**Goal**  
 Transform a YAML configuration file into the domain model from Task 2.1 with:
 
-* Strict parsing.
-* Clear failure on malformed or unknown content.
-* No semantic validation yet (that’s Task 2.3). This stage is about **structure and types** only.
-
-**What this task focuses on (business view)**
-
-* Users edit a YAML file (or a UI writes it). When the backend reads it:
-
-  * Any typo, unknown field, wrong data type, or broken structure must surface as a **configuration-layer failure** with a clear message, not as a random `NullReferenceException`.
-* This is the “compiler front-end” of configuration.
-
-**Inputs**
-
-* YAML schema & examples in PRD / Tech spec.
-* Architecture docs on:
-
-  * Where YAML parsing is allowed (`ReportSyncer.Core.Configuration` only).
-  * Exception taxonomy and how hosts map `ConfigurationException`. 
-
+- Strict parsing.
+- Clear failure on malformed or unknown content.
+- No semantic validation yet. Just structural correctness.
+    
+**Inputs (docs)**
+- PRD:
+    - YAML examples / schema description.
+    - Any notes on future-proofing / backward compatibility.
+- Backend architecture doc:
+    - Host responsibilities vs core responsibilities (where file I/O ends, where core starts).
+        
 **What must be implemented**
-
-* An abstraction for loading configuration:
-
-  * Example: `IConfigurationLoader` with `Task<SyncConfiguration> LoadAsync(string path, CancellationToken ct)`.
-* A YAML-based implementation (e.g. `YamlConfigurationLoader`) that:
-
-  * Uses `YamlDotNet` to parse YAML from disk (or a stream).
-  * Maps YAML nodes into the domain models defined in Task 2.1.
-  * Handles parameter placeholders in fields like filters if required by design.
-  * Fails fast on:
-
-    * Syntax errors.
-    * Unknown top-level or nested fields (do not silently ignore).
-    * Unmappable types (e.g. string where a number is required).
-* Logging integration via `ILogService` to log parse failures with useful context (path, approximate location, key name).
+- An abstraction for loading configuration from a file path (or stream) into the domain model.
+- A YAML-based implementation that:
+    - Reads from disk (or host-provided stream).
+    - Maps YAML structure to the model types defined in Task 2.1.
+    - Fails fast on:
+        - Syntax errors.
+        - Unknown top-level or nested fields.
+        - Unmappable types (e.g. wrong primitive types).
+            
 
 **Constraints & freedom**
-
-* Use `YamlDotNet` as the only YAML library.
-* You may:
-
-  * Use DTOs that mirror YAML shape and then map DTOs → domain models, or
-  * Deserialize directly into domain models (as long as invariants are preserved).
-* All errors at this stage must surface as **configuration-layer failures**, not raw IO or YAML parser exceptions:
-
-  * Wrap them into `ConfigurationException` (or a configuration-specific subtype) with a clear message.
+- Use `YamlDotNet` as the only YAML library, per library requirements.
+- AI coder can:
+    - Use DTOs + mapping OR direct mapping to domain model, as long as the end result is strongly-typed.
+    - Add helper classes to track config path / location for better error messages.
+        
+- All errors at this stage must surface as **configuration-layer failures**, not generic runtime exceptions, so that host can map them later into `ConfigurationException`.
+    
 
 **Expected behavior / tests**
+- Valid YAML sample from PRD loads into the domain model with all expected data present.
+- When the YAML structure is broken (indentation, missing list markers, etc.), a configuration-layer exception is thrown with:
+    - Clear indication it’s a parse problem.
+- When unknown keys appear in YAML, loading fails with:
+    - Explicit message that the key is unsupported (not silently ignored).
+        
+#### Task 2.2.1 Unit tests for YAML loader (in-memory)
 
-* Valid YAML sample loads into `SyncConfiguration` with all expected data present.
-* When the YAML structure is broken (indentation, sequence vs mapping issues), loader throws `ConfigurationException` with:
+**Class:** `YamlConfigurationLoaderTests`
 
-  * Clear indication it’s a parse problem.
-* When unknown keys appear, loader fails with:
+| Test method name                                                                                              | Why test this                                                                                                                                       | Expected result                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LoadAsync_WithValidMinimalConfig_ReturnsExpectedSyncConfiguration`                                           | Prove that the smallest valid YAML config maps correctly into `SyncConfiguration` and nested types.                                                 | Method returns successfully; `SyncConfiguration` is not null; counts for `Connections`, `SyncJobs`, `Tables` match YAML; key properties are mapped as expected; optional sections use defaults/nulls as designed. |
+| `LoadAsync_WithFullExampleConfig_ReturnsExpectedSyncConfiguration`                                            | Ensure the loader handles a realistic “full” config with all sections populated (run/safety/schemaPolicy/multiple connections/jobs/tables/filters). | Method returns successfully; all sections populated; values for safety, schema policy, environments, connection types, job parameters, and table/filter settings match the YAML sample.                           |
+| `LoadAsync_WithUnknownTopLevelKey_ThrowsConfigurationException`                                               | Enforce fail-fast behavior for unknown root-level fields so configs don’t silently drift.                                                           | Passing YAML with an extra root property throws `ConfigurationException`; message indicates unknown field or similar, ideally naming the offending key.                                                           |
+| `LoadAsync_WithUnknownNestedKey_ThrowsConfigurationException`                                                 | Same principle as above, but for nested objects (tables, filters, jobs, etc.).                                                                      | Passing YAML with an unsupported nested property throws `ConfigurationException`; message indicates unknown field and context (e.g. within `tables` or `filters`).                                                |
+| `LoadAsync_WithWrongPrimitiveType_ThrowsConfigurationException`                                               | Ensure type mismatches (string where int/decimal/bool expected) are surfaced clearly, not as random runtime errors.                                 | YAML with wrong primitive type (e.g. `"eighty"` for an integer) throws `ConfigurationException`; message references the field and type problem.                                                                   |
+| `LoadAsync_WithInvalidSchemaPolicyValue_ThrowsConfigurationException`                                         | Guard enum-like fields (`schemaPolicy` etc.) against invalid strings.                                                                               | YAML with invalid schema policy (or similar enum field) throws `ConfigurationException`; message indicates invalid value and allowed options or field name.                                                       |
+| `LoadAsync_WithInvalidYamlSyntax_ThrowsConfigurationException`                                                | Verify corrupt YAML is mapped into a clean configuration error instead of raw parser exceptions.                                                    | Badly formatted YAML causes `ConfigurationException`; message indicates a YAML parse issue (not just a low-level `YamlException`).                                                                                |
+| `LoadAsync_WithEmptyYaml_ThrowsConfigurationException`                                                        | Handle the “file exists but empty” case predictably.                                                                                                | Empty YAML input throws `ConfigurationException`; message indicates missing required root configuration / sections.                                                                                               |
+| `LoadAsync_WithParameterPlaceholders_ProducesExpectedModel` _(optional, only if loader handles placeholders)_ | Lock in how parameter placeholders like `{StartDate}` / `{CustomerId}` are represented after loading.                                               | Loader either preserves placeholders as-is in model or resolves them according to your design; resulting `SyncConfiguration` matches the expected representation of placeholders.                                 |
 
-  * An explicit message that the key is unsupported (to catch typos early).
-* No DB access occurs in this layer.
+---
+
+#### Task 2.2.2 – Integration tests for YAML loading (file IO)
+
+**Class:** `ConfigurationLoadingIntegrationTests`
+
+|Test method name|Why test this|Expected result|
+|---|---|---|
+|`LoadAsync_WithValidMinimalConfigFile_LoadsSuccessfully`|Prove that a minimal, on-disk YAML file goes through real file IO + YAML parsing and returns a valid config.|Given `sync_valid_minimal.yaml` on disk, loader completes without exception; `SyncConfiguration` is non-null; basic counts and key values match the file.|
+|`LoadAsync_WithValidFullConfigFile_LoadsAllSections`|End-to-end check that a realistic full config file loads correctly with IO + parsing + mapping.|Given `sync_valid_full.yaml`, loader completes without exception; all sections (run, safety, schema, connections, jobs, tables, filters) are populated and match the YAML contents.|
+|`LoadAsync_WithConfigFileContainingUnknownKey_ThrowsConfigurationException`|Ensure unknown keys in a real file are rejected with a clear error instead of being ignored.|Given `sync_invalid_unknown_key.yaml` with extra field(s), call throws `ConfigurationException`; message mentions unknown field / invalid configuration and ideally includes the field name.|
+|`LoadAsync_WithConfigFileContainingInvalidPolicy_ThrowsConfigurationException`|Validate real-file behavior when policy-like values are invalid (schema policy, safety mode, etc.).|Given `sync_invalid_schema_policy_value.yaml`, call throws `ConfigurationException`; message indicates invalid value and which setting failed.|
+|`LoadAsync_WithConfigFileContainingBadYaml_ThrowsConfigurationException`|Verify corrupt YAML on disk is reported clearly to the caller.|Given `sync_invalid_syntax.yaml`, call throws `ConfigurationException`; message points to YAML parse failure and includes the file path or enough context for troubleshooting.|
+|`LoadAsync_WithNonExistingFilePath_ThrowsConfigurationException`|Ensure missing files become a clean configuration error that higher layers can show to the user.|Passing a non-existent path throws `ConfigurationException`; message includes the missing path; no raw `FileNotFoundException` leaks out of the loader boundary.|
+
+You can drop these tables straight into the implementation plan under Task 2.2.1 / 2.2.2.
+
+And yes, keep these tests **before** 2.3: first prove “can I load anything sane at all,” then layer “is this config allowed by business rules” on top.
 
 ---
 
 ### Task 2.3 – Implement Configuration Validation
 
-**Goal**
+**Goal**  
 Check all **static** rules that can be validated without DB access:
 
-* Structural integrity.
-* Reference integrity (connections referenced by jobs exist, unique names).
-* Safety-related configuration rules that depend only on YAML.
-* “Obvious footgun” prevention strictly based on config.
+- Structural integrity.
+- Reference integrity (connections referenced by jobs exist).
+- Safety-related configuration rules.
+- “Obvious footgun” prevention strictly based on config + PRD rules.
+    
 
-**What this task focuses on (business view)**
-
-* Prevent clearly dangerous or nonsensical configurations from ever reaching pre-flight / execution:
-
-  * Jobs referencing unknown connections.
-  * Enabled tables with missing source/target.
-  * Pre-sync delete enabled with no filters and `allowAllDelete=false`.
-  * Prod→Prod sync when forbidden.
-* This is the “semantic checker” of YAML.
-
-**Inputs**
-
-* PRD rules for:
-
-  * Environment combinations and Prod/Prod restrictions.
-  * Destructive operations (`preSyncTargetAction`, `allowAllDelete`).
-  * Large delete thresholds and safety latches.
-* Architecture docs:
-
-  * Relationship between configuration validator and later safety components. 
+**Inputs (docs)**
+- PRD: rules for:
+    - Environment combinations (e.g. prod→prod restrictions).
+    - Requirements around destructive operations (table deletes, etc.).
+    - Thresholds / latches (large delete percentages, explicit allow flags).
+        
+- Backend architecture doc:
+    - Description of pre-flight / configuration validation responsibilities.
+    - Relationship with safety module and schema module.
+        
 
 **What must be implemented**
-
-* A validator component:
-
-  * `IConfigurationValidator` with e.g. `void Validate(SyncConfiguration config)`.
-* A concrete `ConfigurationValidator` that:
-
-  * Enforces required fields:
-
-    * Non-empty job names, connection names, table names.
-    * At least one `syncJob`, at least one valid `tables[]` entry per job.
-  * Validates reference integrity:
-
-    * Each `sourceConnection` and `targetConnection` reference must match a `ConnectionConfig`.
-    * Job/table names must be unique where required.
-  * Validates environment and safety:
-
-    * Prod→Prod blocked when `safety.forbidProdToProd == true`.
-    * Self-sync blocked when `safety.requireDifferentConnections == true` and source/target are the same DB.
-    * Configuration that enables `preSyncTargetAction` **without** filter and `allowAllDelete == false` must be rejected.
-  * Validates numeric ranges:
-
-    * Example: `confirmLargeDeletePct` must be between 0 and 1.
-    * Batch sizes / chunk sizes must be positive.
-  * Optionally, performs shallow sanity checks around context injection:
-
-    * E.g., connection type presence where required.
-* Error reporting:
-
-  * Either:
-
-    * Aggregate validation errors into a single `ConfigurationException` carrying a list, or
-    * Throw on first error but with enough context to fix it quickly.
-  * Include information: job name, table index, offending field path.
+- A **validator component** that accepts the domain model and either:
+    - Returns cleanly (valid), or
+    - Throws configuration-layer exception(s) listing all violations.
+        
+- Validation rules that cover at least:
+    - Required fields presence.
+    - Unique connection names.
+    - Jobs only referencing defined connections.
+    - Each job having at least one table task.
+    - Safety flags consistent with destructive operations.
+    - Numeric ranges (e.g. delete thresholds between 0 and 1 if that’s the spec).
+        
+- Capability to report **where** the error occurred (job name, table index, etc.) so host / user can fix YAML quickly.
+    
 
 **Constraints & freedom**
 
-* Validator must NOT:
-
-  * Inspect DB schema.
-  * Query row counts.
-  * Rely on any `DotNetToolkit.Database` types.
-* You may:
-
-  * Introduce helper types like `ConfigurationError` / `ConfigurationErrorCode` to standardize messages.
-  * Delegate purely safety-ish checks to `SafetyValidator` later, as long as config-level static rules are still enforced here.
+- AI coder may:
+    - Aggregate multiple validation errors into one exception with a collection payload.
+    - Introduce helper types like `ConfigurationError` to structure errors.
+    - Add additional “obvious” checks if they align with business expectations (e.g. disallow zero batch sizes, whitespace-only names).
+        
+- Validator must NOT:
+    
+    - Do schema inspection.
+        
+    - Connect to DB.
+        
+    - Apply runtime-derived rules.
+        
 
 **Expected behavior / tests**
 
-* Valid configuration examples pass validation.
-* Broken references (unknown connection names, empty job or table lists) produce clear errors.
-* Configurations that imply full-table delete without `allowAllDelete=true` are rejected with an explicit safety message.
-* Multiple issues in one file can be surfaced together where practical.
+- Valid configuration from PRD passes validation.
+    
+- Broken references (unknown connection names, empty jobs, etc.) produce clear error messages.
+    
+- Full-table destructive behavior without explicit safety latch from PRD produces a clear config error.
+    
+- Multiple config issues in one file can be surfaced together where practical.
+    
 
 ---
 
 ### Task 2.4 – Build Effective Configuration / Overrides Logic
 
-**Goal**
-Allow hosts (CLI/Web API) to override certain runtime options (like dry-run, batch sizes) without changing the underlying YAML file:
+**Goal**  
+Allow hosts (CLI/Web API) to override certain runtime options (like dry-run, batch sizes) without corrupting or rewriting the original configuration:
 
-* Compute an **effective runtime view** based on:
+- Compute an **effective runtime view** based on:
+    
+    - YAML config.
+        
+    - Optional host-provided overrides.
+        
 
-  * YAML config.
-  * Optional host-provided overrides (CLI flags / API payload).
+**Inputs (docs)**
 
-**What this task focuses on (business view)**
-
-* Users might run:
-
-  * “Same job as usual, but dry-run only.”
-  * “Same job but with different batch size for this one run.”
-* The YAML file remains the source of truth; overrides are **transient**.
-
-**Inputs**
-
-* PRD:
-
-  * Which fields are allowed to be overridden at run-time (e.g., `dryRun`, some batch sizes).
-* Architecture docs:
-
-  * How hosts are expected to pass overrides to core (console arguments, API DTOs).
+- PRD:
+    
+    - Which fields should be “user-tunable at run-time” vs fixed in config.
+        
+- Backend architecture doc:
+    
+    - How hosts are expected to influence runs (CLI arguments, API payloads).
+        
 
 **What must be implemented**
 
-* A clear model for:
-
-  * `RunOverrides` (or similar), containing only fields that hosts are allowed to override.
-  * `EffectiveRunConfig` / `EffectiveConfiguration` representing the merged view.
-* Merge rules:
-
-  * Override wins if provided.
-  * Otherwise use YAML value.
-  * If neither exists and field is required:
-
-    * Either use a documented default.
-    * Or throw a config-layer error if spec requires explicit configuration.
-* Helper(s):
-
-  * `IEffectiveConfigurationBuilder` or static helper methods to compute the effective configuration that:
-
-    * Consume `SyncConfiguration` and optional `RunOverrides`.
-    * Produce a read-only object consumed by orchestrator & sync pipeline.
+- A clear concept of:
+    
+    - “Base configuration“: what comes from the YAML.
+        
+    - “Overrides”: limited set of host-supplied tweaks.
+        
+    - “Effective configuration”: the immutable runtime view after merge.
+        
+- Merge rules:
+    
+    - Override wins if present.
+        
+    - Otherwise use YAML.
+        
+    - If neither exists but the feature requires a value, either:
+        
+        - Use a documented default, or
+            
+        - Fail with a configuration-layer error, depending on PRD.
+            
 
 **Constraints & freedom**
 
-* Overrides must stay localized:
-
-  * Sync & schema layers should consume only the **effective** view, not juggle overrides themselves.
-* No direct coupling to CLI or HTTP types:
-
-  * Hosts map CLI / HTTP DTOs → `RunOverrides` and call into core.
+- AI coder can:
+    
+    - Decide exact object shapes for overrides and effective configuration.
+        
+    - Factor repeated merge logic into helpers.
+        
+- Overrides must be localized:
+    
+    - No scattered “manual overrides” sprinkled across orchestrator / sync pipeline.
+        
 
 **Expected behavior / tests**
 
-* When overrides are given:
-
-  * Effective values reflect the overrides and nothing else is unintentionally changed.
-* When overrides are omitted:
-
-  * Effective values exactly match YAML.
-* There is no way for downstream core code to “half see” overrides (all or nothing via effective config).
+- When overrides are given, the effective values reflect the overrides and nothing else is touched.
+    
+- When overrides are omitted, the effective values reflect YAML.
+    
+- It is impossible for later layers (sync, schema) to accidentally “partially see” overrides.
+    
 
 ---
 
 ### Task 2.5 – Configuration Error Model & Host Mapping Contract
 
-**Goal**
+**Goal**  
 Have a **single, explicit error model** for configuration failures, and a clear contract for how hosts react to them (exit codes / HTTP statuses):
 
-* Make configuration-related errors recognizable and consistent.
-* Avoid random generic exceptions leaking out of the core.
+- Make configuration-related errors recognizable and consistent.
+    
+- Avoid random generic exceptions leaking out of the core.
+    
 
-**What this task focuses on (business view)**
+**Inputs (docs)**
 
-* When the user messes up YAML or config semantics, they should see:
-
-  * A clean, structured message.
-  * A deterministic exit code or HTTP status.
-* Hosts must not guess; they inspect exception type / metadata and map.
-
-**Inputs**
-
-* Backend architecture docs:
-
-  * Exception taxonomy.
-  * Mapping rules to host behavior (console/Web API).
+- Backend architecture doc:
+    
+    - Domain exception taxonomy.
+        
+    - Mapping rules to host behavior (console/Web API).
+        
 
 **What must be implemented**
 
-* A dedicated configuration error abstraction, e.g.:
-
-  * `ConfigurationException` (already planned in docs) possibly extended with:
-
-    * Path/location hint within the YAML (e.g. `syncJobs[1].tables[0].filter.dateColumn`).
-    * A collection of structured validation errors:
-
-      * `Code` (e.g. `UnknownConnection`, `MissingRequiredField`, `UnsafeDelete`).
-      * `Message` (user-oriented).
-      * Optional `JobName`, `TableName`, `FieldPath`.
-* Clear internal usage:
-
-  * Loader throws this type for parse / mapping issues.
-  * Validator throws this type for semantic issues.
-  * Overrides & effective config logic also throw this type for override-related config errors.
-  * Any safety-like config checks that are purely static can either produce:
-
-    * `ConfigurationException` with relevant code, or
-    * A more specific `SafetyViolationException` if you want to separate “config invalid” from “config blocked by safety”.
-* A **documented mapping contract** (XML docs / comments) for the hosts:
-
-  * Console host:
-
-    * Map configuration errors to a specific exit code (e.g. 2).
-    * Log them in a user-friendly way (no raw stack traces by default).
-  * Web API host:
-
-    * Map configuration errors to HTTP 4xx (e.g. `400 Bad Request`).
-    * Return a structured body listing error codes, locations, and messages.
+- A dedicated configuration error abstraction, e.g.:
+    
+    - A configuration-specific exception type (name per architecture).
+        
+    - Optionally supporting:
+        
+        - A path or location hint in the config.
+            
+        - A list of structured validation errors.
+            
+- Clear internal usage:
+    
+    - Loader throws this type for parse / mapping issues.
+        
+    - Validator throws this type for semantic issues.
+        
+    - Other config-related code (overrides, effective config) uses the same type for config-level problems.
+        
+- A **documented** (in comments / XML docs / summary) mapping contract:
+    
+    - Console host: maps configuration errors to specific exit code and error logging pattern.
+        
+    - Web API host: maps configuration errors to HTTP 4xx with structured payload.
+        
 
 **Constraints & freedom**
 
-* You may:
-
-  * Choose between a single `ConfigurationException` type with internal collection vs multiple specialized exception types, as long as mapping stays simple.
-  * Add an error code enum/class to help host map to localized messages in the future.
-* Error messages should be user-oriented:
-
-  * “Connection `Report_Prod` is referenced by job `Sync-Reporting-ProdToDev-Filtered` but not defined in `connections`.”
-  * Not raw parser or stack trace text.
+- AI coder can:
+    
+    - Decide whether to store multiple errors, nested errors, or simple message-only in v1, as long as:
+        
+        - It’s testable.
+            
+        - It doesn’t break the mapping contract.
+            
+- Error messages should be user-oriented, not “internal stack trace dump”.
+    
 
 **Expected behavior / tests**
 
-* Any invalid configuration path (parse, validate, override) surfaces as:
+- Any invalid configuration path (parse, validate, override) surfaces as the domain configuration error type.
+    
+- Host-layer tests (later sections) can reliably detect and map configuration errors via this type.
+    
 
-  * The configuration error type (`ConfigurationException`) or, where chosen, `SafetyViolationException` with clear codes.
-* Host-level tests (later sections) can:
+---
 
-  * Detect configuration errors by type.
-  * Map them consistently to exit codes / HTTP statuses and structured HTTP payloads.
+That’s the plan.
 
+You’ve cleanly separated:
+
+- **Section 1:** Infra/toolkit (DotNetToolkit) as independent NuGet(s).
+    
+- **Section 2+:** ReportSyncer.Core domain behavior that _uses_ the toolkit.
+    
+
+This matches your “assign different AI coders per section” model and keeps future you from hunting domain logic inside some “generic helpers” library at 2 a.m.
 
