@@ -1,0 +1,52 @@
+version: "1.0"
+run:
+  dryRun: true
+  defaultBatchSize: 1000
+  deleteChunkSize: 500
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: true
+  requireDifferentConnections: true
+  confirmLargeDeletePct: 0.1
+schemaPolicy:
+  onMismatch: "Warn"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: false
+connections:
+  - name: "Existing"
+    connectionString: "Server=.;Database=Existing;Integrated Security=true;"
+    environment: "Dev"
+    type: "Application"
+syncJobs:
+  - name: ""                       # Missing job name
+    sourceConnection: "Existing"
+    targetConnection: "Existing"
+    tables:
+      - source: "dbo.S"
+        target: "dbo.T"
+        enabled: true
+  - name: "JobMissingSource"
+    sourceConnection: ""             # Missing source connection
+    targetConnection: "Existing"
+    tables:
+      - source: "dbo.S"
+        target: "dbo.T"
+        enabled: true
+  - name: "JobDup"
+    sourceConnection: "Existing"
+    targetConnection: "Existing"
+    tables:
+      - source: "dbo.S1"
+        target: "dbo.T1"
+        enabled: true
+  - name: "JobDup"                  # Duplicate job name
+    sourceConnection: "Existing"
+    targetConnection: "DoesNotExist" # Unknown target connection
+    tables:
+      - source: "dbo.S2"
+        target: "dbo.T2"
+        enabled: true
+  - name: "JobNoTables"
+    sourceConnection: "Existing"
+    targetConnection: "Existing"
+    tables: []                         # No tables

@@ -1,0 +1,23 @@
+version: "1.0"
+# 'run' section intentionally omitted to trigger loader validation
+safety:
+  forbidProdToProd: true
+  requireDifferentConnections: true
+  confirmLargeDeletePct: 0.1
+schemaPolicy:
+  onMismatch: "Warn"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: false
+connections:
+  - name: "C1"
+    connectionString: "Server=.;Database=C1;Integrated Security=true;"
+    environment: "Dev"
+    type: "Application"
+syncJobs:
+  - name: "Job1"
+    sourceConnection: "C1"
+    targetConnection: "C1"
+    tables:
+      - source: "dbo.S"
+        target: "dbo.T"
+        enabled: true

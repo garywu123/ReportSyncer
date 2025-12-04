@@ -1,0 +1,39 @@
+version: "1.0"
+run:
+  dryRun: true
+  defaultBatchSize: 1000
+  deleteChunkSize: 500
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: true
+  requireDifferentConnections: true
+  confirmLargeDeletePct: 0.1
+schemaPolicy:
+  onMismatch: "Warn"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: false
+connections:
+  - name: "C1"
+    connectionString: "Server=.;Database=C1;Integrated Security=true;"
+    environment: "Dev"
+    type: "Application"
+syncJobs:
+  - name: "JobTables"
+    sourceConnection: "C1"
+    targetConnection: "C1"
+    tables:
+      - source: ""                # Missing source
+        target: "dbo.T1"
+        enabled: true
+      - source: "dbo.S2"
+        target: ""                # Missing target
+        enabled: true
+      - source: "FullTable"
+        target: "FullTable_Tgt"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: false      # Full-table delete without safety latch
+      - source: "BadThreshold"
+        target: "dbo.T3"
+        enabled: true
+        deleteThreshold: 1.1       # Out-of-range threshold (example)

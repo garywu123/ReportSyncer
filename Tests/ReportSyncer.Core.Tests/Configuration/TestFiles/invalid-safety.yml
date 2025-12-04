@@ -1,0 +1,28 @@
+version: "1.0"
+run:
+  dryRun: false
+  defaultBatchSize: 0        # Invalid: must be > 0
+  deleteChunkSize: -10      # Invalid: must be > 0
+  useTvpIfAvailable: true
+  etaSmoothing: 1.5         # Invalid: > 1.0
+safety:
+  forbidProdToProd: true
+  requireDifferentConnections: true
+  confirmLargeDeletePct: -0.01  # Invalid: < 0.0
+schemaPolicy:
+  onMismatch: "Warn"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: false
+connections:
+  - name: "C1"
+    connectionString: "Server=.;Database=C1;Integrated Security=true;"
+    environment: "Dev"
+    type: "Application"
+syncJobs:
+  - name: "JobSafe"
+    sourceConnection: "C1"
+    targetConnection: "C1"
+    tables:
+      - source: "dbo.S"
+        target: "dbo.T"
+        enabled: true

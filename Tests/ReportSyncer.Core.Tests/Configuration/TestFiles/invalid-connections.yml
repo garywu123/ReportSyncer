@@ -1,0 +1,39 @@
+version: "1.0"
+run:
+  dryRun: true
+  defaultBatchSize: 1000
+  deleteChunkSize: 500
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: true
+  requireDifferentConnections: true
+  confirmLargeDeletePct: 0.1
+schemaPolicy:
+  onMismatch: "Warn"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: false
+connections:
+  - name: ""                        # Missing name
+    connectionString: "Server=.;Database=EmptyName;Integrated Security=true;"
+    environment: "Dev"
+    type: "Application"
+  - name: "DupConn"
+    connectionString: "Server=.;Database=Dup1;Integrated Security=true;"
+    environment: "Dev"
+    type: "Application"
+  - name: "DupConn"                 # Duplicate name
+    connectionString: "Server=.;Database=Dup2;Integrated Security=true;"
+    environment: "UnknownEnv"      # Invalid environment value
+    type: "Reporting"
+  - name: "NoConnString"
+    connectionString: ""            # Missing connection string
+    environment: "Dev"
+    type: "Application"
+syncJobs:
+  - name: "ConnJob"
+    sourceConnection: "DupConn"
+    targetConnection: "NoConnString"
+    tables:
+      - source: "dbo.S"
+        target: "dbo.T"
+        enabled: true

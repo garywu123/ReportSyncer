@@ -1,0 +1,23 @@
+version: "1.0"
+run:
+  dryRun: true
+  defaultBatchSize: 1000
+  deleteChunkSize: 500
+  useTvpIfAvailable: true
+schemaPolicy:
+  onMismatch: "Warn"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: false
+connections:
+  - name: "C1"
+    connectionString: "Server=.;Database=C1;Integrated Security=true;"
+    environment: "Dev"
+    type: "Application"
+syncJobs:
+  - name: "Job1"
+    sourceConnection: "C1"
+    targetConnection: "C1"
+    tables:
+      - source: "dbo.S"
+        target: "dbo.T"
+        enabled: true
