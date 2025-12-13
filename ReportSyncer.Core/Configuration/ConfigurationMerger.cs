@@ -16,21 +16,6 @@ namespace ReportSyncer.Core.Configuration
     /// <see cref="SyncConfiguration"/> to produce an immutable "effective" configuration
     /// instance used by the rest of the pipeline.
     /// </summary>
-    /// <remarks>
-    /// The merge rules are intentionally narrow: only run-level fields are considered.
-    /// Validation for override values is performed here and any invalid override results
-    /// in a <see cref="ConfigurationException"/> with one or more <see cref="ConfigurationError"/> entries.
-    /// 
-    /// Important policy: All runtime overrides MUST flow through the following path and no other:
-    /// <list type="bullet">
-    /// <item><description>`RuntimeOverrides` (host-provided)</description></item>
-    /// <item><description>`ConfigurationMerger.ApplyOverrides(...)` (this class)</description></item>
-    /// <item><description>`IConfigurationProvider.LoadAndValidateAsync(path, overrides, ct)` (provider entry point)</description></item>
-    /// <item><description>Downstream components (PreFlightValidator, SyncOrchestrator, etc.) only accept the resulting `SyncConfiguration`</description></item>
-    /// </list>
-    /// This ensures a single, auditable place for override validation and prevents scattering
-    /// ad-hoc override checks across the codebase.
-    /// </remarks>
     internal static class ConfigurationMerger
     {
         /// <summary>

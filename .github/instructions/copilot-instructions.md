@@ -1,4 +1,4 @@
-#copilot #ReportSyncer  
+# copilot #ReportSyncer  
 ## Overview
 This document describes guidance for working across the ReportSyncer solution and the shared DotNetToolkit libraries. It covers repository contents, C# generation rules, layering constraints, exception usage, guidance for adding new behavior, and code style requirements.
 
