@@ -22,7 +22,7 @@ Canonical backend docs live in `docs/`:
 - `40_Backend Implementation Plan.md`
 
 ## C# Generation Guidelines
-- **Target:** `net8.0` and modern C# features (records, pattern matching).
+- **Target:** `net8.0` and modern C# 8 features (records, pattern matching).
 - **DI:** Use `Microsoft.Extensions.DependencyInjection` for DI abstractions.
 - **Logging:** From domain code, log via `DotNetToolkit.Logging.ILogService` only. Hosts may wire Serilog; do not use Serilog directly in `ReportSyncer.Core`.
 - **Database:** Use `DotNetToolkit.Database` abstractions (`IDbContext`, `IDbCommandWrapper`, etc.) for DB access. Do not use Entity Framework.
