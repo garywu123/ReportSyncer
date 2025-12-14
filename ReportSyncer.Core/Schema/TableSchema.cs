@@ -2,30 +2,33 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+// ReSharper disable MemberCanBePrivate.Global
+
 namespace ReportSyncer.Core.Schema
 {
     /// <summary>
     /// Represents table-level schema information: columns, PK column names and FKs.
     /// Immutable after construction.
     /// </summary>
-    public sealed record TableSchema(
-        TableIdentifier Table,
-        IReadOnlyList<ColumnSchema> Columns,
-        IReadOnlyList<string> PrimaryKeyColumns,
-        IReadOnlyList<ForeignKeySchema> ForeignKeys)
+    public sealed class TableSchema(
+        TableIdentifier                  table,
+        IReadOnlyList<ColumnSchema>      columns,
+        IReadOnlyList<string>?           primaryKeyColumns,
+        IReadOnlyList<ForeignKeySchema>? foreignKeys)
     {
-        public TableSchema
-        {
-            Table ??= throw new ArgumentNullException(nameof(Table));
-            Columns = Columns ?? Array.Empty<ColumnSchema>();
-            PrimaryKeyColumns = PrimaryKeyColumns ?? Array.Empty<string>();
-            ForeignKeys = ForeignKeys ?? Array.Empty<ForeignKeySchema>();
-        }
+        public TableIdentifier Table { get; } =
+            table ?? throw new ArgumentNullException(nameof(table));
+
+        public IReadOnlyList<ColumnSchema>     Columns           { get; } = columns           ?? [];
+        public IReadOnlyList<string>           PrimaryKeyColumns { get; } = primaryKeyColumns ?? [];
+        public IReadOnlyList<ForeignKeySchema> ForeignKeys       { get; } = foreignKeys       ?? [];
 
         public ColumnSchema? GetColumn(string name)
         {
-            if (string.IsNullOrWhiteSpace(name)) return null;
-            return Columns.FirstOrDefault(c => StringComparer.OrdinalIgnoreCase.Equals(c.Name, name));
+            return string.IsNullOrWhiteSpace(name)
+                ? null
+                : Columns.FirstOrDefault(c => StringComparer.OrdinalIgnoreCase.Equals(c.Name, name)
+                );
         }
     }
 }

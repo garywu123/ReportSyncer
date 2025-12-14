@@ -60,13 +60,11 @@ namespace ReportSyncer.Core.Schema
 
                 foreach (var fk in fkSchemas)
                 {
-                    if (tableMap.TryGetValue(fk.FromTable, out var tsFrom))
-                    {
-                        var fks = tsFrom.ForeignKeys.ToList();
-                        fks.Add(fk);
-                        var newTs = tsFrom with { ForeignKeys = fks };
-                        tableMap[fk.FromTable] = newTs;
-                    }
+                    if (!tableMap.TryGetValue(fk.FromTable, out var tsFrom)) continue;
+                    var fks = tsFrom.ForeignKeys.ToList();
+                    fks.Add(fk);
+                    var newTs = new TableSchema(tsFrom.Table, tsFrom.Columns, tsFrom.PrimaryKeyColumns, fks);
+                    tableMap[fk.FromTable] = newTs;
                 }
 
                 var resultTables = tableMap.Values.ToList();

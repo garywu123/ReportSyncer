@@ -6,20 +6,33 @@ namespace ReportSyncer.Core.Schema
     /// Represents a single column's schema metadata.
     /// Immutable once constructed.
     /// </summary>
-    public sealed record ColumnSchema(
-        string Name,
-        Type ClrType,
-        string DbType,
-        bool IsNullable,
-        bool IsIdentity,
-        bool IsPrimaryKeyPart,
-        int? MaxLength)
+    public sealed class ColumnSchema
     {
-        public ColumnSchema
+        public string Name { get; }
+        public Type ClrType { get; }
+        public string DbType { get; }
+        public bool IsNullable { get; }
+        public bool IsIdentity { get; }
+        public bool IsPrimaryKeyPart { get; }
+        public int? MaxLength { get; }
+
+        public ColumnSchema(
+            string name,
+            Type clrType,
+            string dbType,
+            bool isNullable,
+            bool isIdentity,
+            bool isPrimaryKeyPart,
+            int? maxLength)
         {
-            if (string.IsNullOrWhiteSpace(Name)) throw new ArgumentException("Column name must be provided", nameof(Name));
-            ClrType ??= typeof(object);
-            if (string.IsNullOrWhiteSpace(DbType)) DbType = string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Column name must be provided", nameof(name));
+            Name = name;
+            ClrType = clrType ?? typeof(object);
+            DbType = string.IsNullOrWhiteSpace(dbType) ? string.Empty : dbType;
+            IsNullable = isNullable;
+            IsIdentity = isIdentity;
+            IsPrimaryKeyPart = isPrimaryKeyPart;
+            MaxLength = maxLength;
         }
     }
 }

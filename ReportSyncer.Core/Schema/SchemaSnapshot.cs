@@ -30,7 +30,7 @@ namespace ReportSyncer.Core.Schema
 
         public SchemaRole Role { get; }
 
-        public IReadOnlyCollection<TableSchema> Tables => _tables.Values;
+        public IReadOnlyCollection<TableSchema> Tables => _tables.Values.ToList();
 
         public bool TryGetTable(TableIdentifier id, out TableSchema? table) => _tables.TryGetValue(id, out table);
 
