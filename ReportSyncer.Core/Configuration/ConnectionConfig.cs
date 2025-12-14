@@ -47,30 +47,6 @@ namespace ReportSyncer.Core.Configuration
         /// <summary>
         /// Gets the type classification for this connection.
         /// </summary>
-        /// <remarks>
-        /// <para>
-        /// Determines context injection behavior:
-        /// </para>
-        /// <list type="bullet">
-        /// <item>
-        /// <description>
-        /// <b>Application → Reporting:</b> System automatically injects context columns
-        /// (e.g., CustomerId) from job parameters.
-        /// </description>
-        /// </item>
-        /// <item>
-        /// <description>
-        /// <b>Reporting → Reporting:</b> No automatic context injection; treat CustomerId
-        /// as a normal column.
-        /// </description>
-        /// </item>
-        /// <item>
-        /// <description>
-        /// <b>Application → Application:</b> Typically not allowed; use for specialized scenarios only.
-        /// </description>
-        /// </item>
-        /// </list>
-        /// </remarks>
         public ConnectionType Type { get; }
 
         /// <summary>
