@@ -10,7 +10,7 @@ public class YamlConfigurationLoaderIntegrationTests
     private static string GetTestFilePath(string fileName)
     {
         var baseDir = AppContext.BaseDirectory ?? Directory.GetCurrentDirectory();
-        return Path.Combine(baseDir, "Configuration", "TestFiles", fileName);
+        return Path.Combine(baseDir, "TestFiles", fileName);
     }
 
     [Fact]

@@ -11,7 +11,7 @@ public class YamlConfigurationLoaderUnitTests
     {
         // Test files are copied to output by the csproj; use BaseDirectory to locate them.
         var baseDir = AppContext.BaseDirectory ?? Directory.GetCurrentDirectory();
-        return Path.Combine(baseDir, "Configuration", "TestFiles", fileName);
+        return Path.Combine(baseDir, "TestFiles", fileName);
     }
 
     
