@@ -13,11 +13,11 @@ using ReportSyncer.Core.Schema;
 
 namespace ReportSyncer.Core.Tests.UnitTests.Schema;
 
+[Trait("Type", "UnitTest")]
+[Trait("Area", "Schema")]
 public class ColumnPairTests
 {
     [Fact]
-    [Trait("Type","Unit")]
-    [Trait("Area","Schema")]
     public void Ctor_Rejects_Blank_From_Or_To()
     {
         Action a1 = () => new ColumnPair(null!, "T");

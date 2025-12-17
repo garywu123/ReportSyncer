@@ -13,11 +13,11 @@ using ReportSyncer.Core.Schema;
 
 namespace ReportSyncer.Core.Tests.UnitTests.Schema;
 
+[Trait("Type", "UnitTest")]
+[Trait("Area", "Schema")]
 public class TableIdentifierTests
 {
     [Fact]
-    [Trait("Type","Unit")]
-    [Trait("Area","Schema")]
     public void Ctor_Rejects_Blank_Schema_Or_Table()
     {
         Action a1 = () => new TableIdentifier(null!, "T");
@@ -32,8 +32,6 @@ public class TableIdentifierTests
     }
 
     [Fact]
-    [Trait("Type","Unit")]
-    [Trait("Area","Schema")]
     public void Equality_Is_Case_Insensitive_But_Schema_Must_Match()
     {
         var a = new TableIdentifier("dbo", "Customer");
@@ -47,8 +45,6 @@ public class TableIdentifierTests
     }
 
     [Fact]
-    [Trait("Type","Unit")]
-    [Trait("Area","Schema")]
     public void ToString_Formats_Schema_Dot_Table()
     {
         var t = new TableIdentifier("dbo","MyTable");
