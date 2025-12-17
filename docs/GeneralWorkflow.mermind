@@ -1,0 +1,46 @@
+Collecting workspace informationGitHub Copilot
+
+1. 配置层静态校验（YAML → domain）  
+   - 执行：`ConfigurationValidator` 验证 job/table 字段、名称、关联连接、delete 规则等。  
+   - 参考：[`ReportSyncer.Core.Configuration.ConfigurationValidator`](ReportSyncer.Core/Configuration/ConfigurationValidator.cs)、[`ReportSyncer.Core.Configuration.TableTaskConfig`](ReportSyncer.Core/Configuration/TableTaskConfig.cs)、[`ReportSyncer.Core.Configuration.YamlConfigurationLoader`](ReportSyncer.Core/Configuration/YamlConfigurationLoader.cs)。
+
+2. 预检（Pre-flight）入口（Orchestrator 调用）  
+   - 执行：`ISyncOrchestrator` / `PreFlightValidator` 启动预检链（连接可达、schema、映射、依赖、权限、安全）。  
+   - 参考：架构说明 [docs/20_ReportSyncer Backend Architecture.instruction.md](docs/20_ReportSyncer Backend Architecture.instruction.md)、[docs/30_ReportSyncer Backend Detail Arch.md](docs/30_ReportSyncer Backend Detail Arch.md)。
+
+3. Schema 检查（对选中表调用 Inspector）  
+   - 执行：调用 `ISchemaInspector.InspectAsync` 获取 Source/Target 的 `SchemaSnapshot`（列、PK、FK、identity 等）。  
+   - 参考实现：[`ReportSyncer.Core.Schema.ISchemaInspector`](ReportSyncer.Core/Schema/ISchemaInspector.cs)、[`ReportSyncer.Core.Schema.SqlServerSchemaInspector`](ReportSyncer.Core/Schema/SqlServerSchemaInspector.cs)、返回类型 `ReportSyncer.Core.Schema.SchemaSnapshot`。
+
+4. Inspector 细节（SqlServer 实现流程）  
+   - 执行：为每表读取列（LoadColumnsAsync），读取 FK 行（LoadForeignKeysAsync），构建 `TableSchema` 与 `ForeignKeySchema` 并返回 `SchemaSnapshot`（注意：代码中此 inspector 默认为 SchemaRole.Target）。  
+   - 参考：`ReportSyncer.Core.Schema.SqlServerSchemaInspector`。
+
+5. Schema 映射与上下文注入规则（SchemaMapper）  
+   - 执行：对 Source/Target `TableSchema` 做列映射（name-automap、类型兼容、Context Column 注入规则：Application→Reporting），处理歧义（若 Source 已有 Context 列则报错）。  
+   - 参考：设计说明 [docs/40_Backend Implementation Plan.md](docs/40_Backend Implementation Plan.md)（Task 3.3）、[docs/10_Product Requirements Document.Instruction.md](docs/10_Product Requirements Document.Instruction.md)。
+
+6. 依赖闭包校验（JobDependencyValidator / IDependencyResolver）  
+   - 执行：基于 Target 的 FK 构建依赖图，仅在「参与表集合」上做拓扑排序；若某选中表依赖于未选表，返回包含 DependentTable 与 MissingDependencyTable 的错误并失败预检。若有环，返回 cycle 详情。  
+   - 参考：设计说明 [docs/20_ReportSyncer Backend Architecture.instruction.md](docs/20_ReportSyncer Backend Architecture.instruction.md)、[docs/40_Backend Implementation Plan.md](docs/40_Backend Implementation Plan.md)（Task 3.4/3.5）。
+
+7. 权限与安全策略检查（PermissionProfiler / SafetyValidator）  
+   - 执行：检查目标 DB 权限、prod→prod 禁止、自同步、allowAllDelete / confirmLargeDeletePct、无 filter 的全表删除等安全 guardrails；失败抛出 `SafetyViolationException`。  
+   - 参考：安全规则汇总 [docs/10_Product Requirements Document.Instruction.md](docs/10_Product Requirements Document.Instruction.md)、架构文档 [docs/30_ReportSyncer Backend Detail Arch.md](docs/30_ReportSyncer Backend Detail Arch.md)。
+
+8. 估算工作量与最终规划（WorkEstimator → ExecutionPlan）  
+   - 执行：`WorkEstimator` 统计 SELECT COUNT(*)（带 filter），`IDependencyResolver` 生成 Insert / Delete 顺序（parents→children / children→parents），构建 `ExecutionPlan` 并返回给 Orchestrator / UI。  
+   - 参考：设计说明 [docs/30_ReportSyncer Backend Detail Arch.md](docs/30_ReportSyncer Backend Detail Arch.md)、`ReportSyncer.Core.Schema.SchemaSnapshot`。
+
+9. 执行阶段（ITableRunner / IDataWriter）——仅在预检全部通过且非 dry-run 时执行  
+   - 执行：按 DeleteOrder 逐表执行（带 filter / chunking / identity insert 管理），随后按 InsertOrder 执行批量插入（TVP / batch）。错误路径需保证 IdentityInsert OFF、事务与异常上报一致。若 dry-run，则只记录计划与估算。  
+   - 参考：架构说明 [docs/20_ReportSyncer Backend Architecture.instruction.md](docs/20_ReportSyncer Backend Architecture.instruction.md)、[docs/30_ReportSyncer Backend Detail Arch.md](docs/30_ReportSyncer Backend Detail Arch.md)。
+
+快速跳转（文件/符号）
+- `ReportSyncer.Core.Configuration.ConfigurationValidator`  
+- `ReportSyncer.Core.Configuration.TableTaskConfig`  
+- `ReportSyncer.Core.Configuration.YamlConfigurationLoader`  
+- `ReportSyncer.Core.Schema.ISchemaInspector`  
+- `ReportSyncer.Core.Schema.SqlServerSchemaInspector` (当前文件)  
+- `ReportSyncer.Core.Schema.SchemaSnapshot`  
+- 设计/需求文档：[docs/10_Product Requirements Document.Instruction.md](docs/10_Product Requirements Document.Instruction.md)、[docs/20_ReportSyncer Backend Architecture.instruction.md](docs/20_ReportSyncer Backend Architecture.instruction.md)、[docs/30_ReportSyncer Backend Detail Arch.md](docs/30_ReportSyncer Backend Detail Arch.md)、[docs/40_Backend Implementation Plan.md](docs/40_Backend Implementation Plan.md)

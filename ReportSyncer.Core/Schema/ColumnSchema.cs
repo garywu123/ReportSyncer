@@ -1,38 +1,36 @@
-using System;
+namespace ReportSyncer.Core.Schema;
 
-namespace ReportSyncer.Core.Schema
+/// <summary>
+/// Represents a single column's schema metadata.
+/// Immutable once constructed.
+/// </summary>
+public sealed class ColumnSchema
 {
-    /// <summary>
-    /// Represents a single column's schema metadata.
-    /// Immutable once constructed.
-    /// </summary>
-    public sealed class ColumnSchema
-    {
-        public string Name { get; }
-        public Type ClrType { get; }
-        public string DbType { get; }
-        public bool IsNullable { get; }
-        public bool IsIdentity { get; }
-        public bool IsPrimaryKeyPart { get; }
-        public int? MaxLength { get; }
+    public string Name             { get; }
+    public Type   ClrType          { get; }
+    public string DbType           { get; }
+    public bool   IsNullable       { get; }
+    public bool   IsIdentity       { get; }
+    public bool   IsPrimaryKeyPart { get; }
+    public int?   MaxLength        { get; }
 
-        public ColumnSchema(
-            string name,
-            Type clrType,
-            string dbType,
-            bool isNullable,
-            bool isIdentity,
-            bool isPrimaryKeyPart,
-            int? maxLength)
-        {
-            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Column name must be provided", nameof(name));
-            Name = name;
-            ClrType = clrType ?? typeof(object);
-            DbType = string.IsNullOrWhiteSpace(dbType) ? string.Empty : dbType;
-            IsNullable = isNullable;
-            IsIdentity = isIdentity;
-            IsPrimaryKeyPart = isPrimaryKeyPart;
-            MaxLength = maxLength;
-        }
+    public ColumnSchema(string name,
+                        Type   clrType,
+                        string dbType,
+                        bool   isNullable,
+                        bool   isIdentity,
+                        bool   isPrimaryKeyPart,
+                        int?   maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Column name must be provided", nameof(name));
+
+        Name = name;
+        ClrType = clrType ?? typeof(object);
+        DbType = string.IsNullOrWhiteSpace(dbType) ? string.Empty : dbType;
+        IsNullable = isNullable;
+        IsIdentity = isIdentity;
+        IsPrimaryKeyPart = isPrimaryKeyPart;
+        MaxLength = maxLength;
     }
 }

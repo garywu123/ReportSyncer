@@ -1,8 +1,8 @@
----
-description: Rules for tests in this repository
-applyTo: "tests/**"
----
+## Plan: Schema Testing Cases
 
+Draft test matrix for ReportSyncer.Core Schema to cover value objects and inspector behavior.
+
+## Code requirements (tests)
 1. Use xUnit for all tests. Follow AAA (Arrange/Act/Assert) structure.
 2. Use FluentAssertions for assertions (including exception assertions with message when meaningful).
 3. Use Moq for mocking external dependencies. Prefer MockBehavior.Strict for key collaborators.
@@ -20,7 +20,13 @@ applyTo: "tests/**"
    - Maintain folder/namespace conventions consistent with ReportSyncer.Tests structure.
 7. Coverage expectations:
    - For each public method: cover happy path + key edge cases + error/exception paths.
-- Prefer unit tests for pure logic (configuration, mapping, safety rules, orchestration control flow).
-- Use integration tests only for code that talks to a real database or filesystem (schema inspection, data writer, work estimator).
-- Follow the "Test Surfaces & Seams" matrix from the backend architecture docs when deciding where to attach tests.
-- Keep tests deterministic and explicit about DB setup, test data, and expected side effects.
+
+
+### Steps
+1. Catalog unit cases for value objects: validate guards/equality in [Schema/ColumnSchema.cs](ReportSyncer.Core/Schema/ColumnSchema.cs), [ForeignKeySchema.cs](ReportSyncer.Core/Schema/ForeignKeySchema.cs), [TableIdentifier.cs](ReportSyncer.Core/Schema/TableIdentifier.cs), [TableSchema.cs](ReportSyncer.Core/Schema/TableSchema.cs), [SchemaSnapshot.cs](ReportSyncer.Core/Schema/SchemaSnapshot.cs).
+2. Define unit cases for mapper helpers in [SqlServerSchemaInspector.cs](ReportSyncer.Core/Schema/SqlServerSchemaInspector.cs) using fakes: null/empty inputs, type mapping, FK grouping, cascade flag, TableIdentifier comparer behavior.
+3. Separate integration scenarios for SqlServerSchemaInspector with real IDbContext: actual column load, PK/identity/nullable flags, FK attachment to parents, case-insensitive lookups, error wrapping.
+
+### Further Considerations
+1. Confirm whether to mock IDbContext for inspector unit tests vs lightweight in-memory stub (no real SQL).
+2. Decide target DB for integration (LocalDB vs container SQL) and test fixture lifecycle.

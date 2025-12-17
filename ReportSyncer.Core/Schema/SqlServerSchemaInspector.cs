@@ -1,12 +1,8 @@
-using System;
-using System.Collections.Generic;
 using System.Data;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using DotNetToolkit.Database.Abstractions;
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Exceptions;
+// ReSharper disable UnusedMember.Local
 
 namespace ReportSyncer.Core.Schema
 {
@@ -14,18 +10,15 @@ namespace ReportSyncer.Core.Schema
     /// SQL Server implementation of <see cref="ISchemaInspector"/>.
     /// Uses a factory delegate to obtain an <see cref="IDbContext"/> for the provided <see cref="ConnectionConfig"/>.
     /// </summary>
-    public sealed class SqlServerSchemaInspector : ISchemaInspector
+    public sealed class SqlServerSchemaInspector(
+        Func<ConnectionConfig, IDbContext> dbContextFactory)
+        : ISchemaInspector
     {
-        private readonly Func<ConnectionConfig, IDbContext> _dbContextFactory;
-
-        public SqlServerSchemaInspector(Func<ConnectionConfig, IDbContext> dbContextFactory)
-        {
-            _dbContextFactory = dbContextFactory ?? throw new ArgumentNullException(nameof(dbContextFactory));
-        }
+        private readonly Func<ConnectionConfig, IDbContext> _dbContextFactory = dbContextFactory ?? throw new ArgumentNullException(nameof(dbContextFactory));
 
         public async Task<SchemaSnapshot> InspectAsync(ConnectionConfig connection, IEnumerable<TableIdentifier> tables, CancellationToken ct = default)
         {
-            if (connection == null) throw new ArgumentNullException(nameof(connection));
+            ArgumentNullException.ThrowIfNull(connection);
             if (tables == null) throw new ArgumentNullException(nameof(tables));
 
             var requested = tables.ToList();
@@ -83,28 +76,30 @@ namespace ReportSyncer.Core.Schema
 
         private async Task<List<ColumnSchema>> LoadColumnsAsync(IDbContext ctx, TableIdentifier table, CancellationToken ct)
         {
-            const string sql = @"
-SELECT s.name AS SchemaName,
-       t.name AS TableName,
-       c.name AS ColumnName,
-       ty.name AS DataType,
-       c.max_length AS MaxLength,
-       c.is_nullable AS IsNullable,
-       ic.is_identity AS IsIdentity,
-       CASE WHEN pkcols.column_id IS NOT NULL THEN 1 ELSE 0 END AS IsPrimaryKeyPart
-FROM sys.tables t
-JOIN sys.schemas s ON t.schema_id = s.schema_id
-JOIN sys.columns c ON c.object_id = t.object_id
-LEFT JOIN sys.types ty ON c.user_type_id = ty.user_type_id
-LEFT JOIN sys.identity_columns ic ON ic.object_id = t.object_id AND ic.column_id = c.column_id
-LEFT JOIN (
-    SELECT ic2.object_id, ic2.column_id
-    FROM sys.indexes i2
-    JOIN sys.index_columns ic2 ON ic2.object_id = i2.object_id AND ic2.index_id = i2.index_id
-    WHERE i2.is_primary_key = 1
-) pkcols ON pkcols.object_id = c.object_id AND pkcols.column_id = c.column_id
-WHERE s.name = @schema AND t.name = @table
-ORDER BY c.column_id";
+            const string sql = """
+
+                               SELECT s.name AS SchemaName,
+                                      t.name AS TableName,
+                                      c.name AS ColumnName,
+                                      ty.name AS DataType,
+                                      c.max_length AS MaxLength,
+                                      c.is_nullable AS IsNullable,
+                                      ic.is_identity AS IsIdentity,
+                                      CASE WHEN pkcols.column_id IS NOT NULL THEN 1 ELSE 0 END AS IsPrimaryKeyPart
+                               FROM sys.tables t
+                               JOIN sys.schemas s ON t.schema_id = s.schema_id
+                               JOIN sys.columns c ON c.object_id = t.object_id
+                               LEFT JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+                               LEFT JOIN sys.identity_columns ic ON ic.object_id = t.object_id AND ic.column_id = c.column_id
+                               LEFT JOIN (
+                                   SELECT ic2.object_id, ic2.column_id
+                                   FROM sys.indexes i2
+                                   JOIN sys.index_columns ic2 ON ic2.object_id = i2.object_id AND ic2.index_id = i2.index_id
+                                   WHERE i2.is_primary_key = 1
+                               ) pkcols ON pkcols.object_id = c.object_id AND pkcols.column_id = c.column_id
+                               WHERE s.name = @schema AND t.name = @table
+                               ORDER BY c.column_id
+                               """;
 
             var cmd = ctx.CreateCommand(sql, CommandType.Text);
             cmd.AddParameter("@schema", table.SchemaName, DbType.String);
@@ -119,12 +114,13 @@ ORDER BY c.column_id";
                 r.IsNullable,
                 r.IsIdentity,
                 r.IsPrimaryKeyPart,
-                r.MaxLength == null || r.MaxLength == 0 ? null : (int?)r.MaxLength
+                r.MaxLength is null or 0 ? null : (int?)r.MaxLength
             )).ToList();
 
             return result;
         }
 
+        
         private async Task<List<ForeignKeyRow>> LoadForeignKeysAsync(IDbContext ctx, CancellationToken ct)
         {
             const string sql = @"
