@@ -1,11 +1,7 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using ReportSyncer.Core.Configuration;
-using ReportSyncer.Core.Tests.Testing;
 
-namespace ReportSyncer.Core.Tests.Configuration;
+
+namespace ReportSyncer.Core.Tests.Helpers;
 
 /// <summary>
 /// Helper to load YAML test files using the production YAML loader.
@@ -22,7 +18,7 @@ public static class ConfigurationYamlTestHelper
     /// <summary>
     /// Async loader wrapper for tests.
     /// </summary>
-    public static async Task<SyncConfiguration> LoadFromYamlFileAsync(string relativePath, CancellationToken ct = default)
+    private static async Task<SyncConfiguration> LoadFromYamlFileAsync(string relativePath, CancellationToken ct = default)
     {
         var baseDir = AppContext.BaseDirectory ?? Directory.GetCurrentDirectory();
         var path = Path.Combine(baseDir, "Configuration", "TestFiles", relativePath);

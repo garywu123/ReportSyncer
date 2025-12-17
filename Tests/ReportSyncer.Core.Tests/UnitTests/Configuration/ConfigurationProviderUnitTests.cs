@@ -1,13 +1,9 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using ReportSyncer.Core.Configuration;
-using Xunit;
-using ReportSyncer.Core.Tests.Testing;
+using ReportSyncer.Core.Tests.Helpers;
 
-namespace ReportSyncer.Core.Tests.Configuration;
+namespace ReportSyncer.Core.Tests.UnitTests.Configuration;
 
-[Trait("Category", "Unit Test")]
+[Trait("Type", "UnitTest")][Trait("Area", "Configuration")]
 public class ConfigurationProviderUnitTests
 {
     [Fact]

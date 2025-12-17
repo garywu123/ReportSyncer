@@ -1,9 +1,7 @@
-using System.Collections.Generic;
 using System.Reflection;
-using System.Runtime.Serialization;
 using ReportSyncer.Core.Configuration;
 
-namespace ReportSyncer.Core.Tests.Configuration;
+namespace ReportSyncer.Core.Tests.Helpers;
 
 /// <summary>
 /// Factory for valid test configurations ("golden" configs mutated for negative tests).

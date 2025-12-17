@@ -1,10 +1,10 @@
 using ReportSyncer.Core.Configuration;
-using ReportSyncer.Core.Tests.Testing;
-using Xunit;
+using ReportSyncer.Core.Tests.Helpers;
 
-namespace ReportSyncer.Core.Tests.Configuration;
+namespace ReportSyncer.Core.Tests.IntegrationTests.Configuration;
 
-[Trait("Category","Integration")]
+[Trait("Type", "IntegrationTest")]
+[Trait("Area", "Configuration")]
 public class YamlConfigurationLoaderIntegrationTests
 {
     private static string GetTestFilePath(string fileName)

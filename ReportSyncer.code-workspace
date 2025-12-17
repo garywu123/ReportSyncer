@@ -10,5 +10,7 @@
 			"path": "../DotNetToolkit"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"powershell.cwd": "ReportSyncer"
+	}
 }

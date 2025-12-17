@@ -1,16 +1,13 @@
-using System;
-using System.Collections.Generic;
 using ReportSyncer.Core.Configuration;
-using ReportSyncer.Core.Tests.Testing;
-using Xunit;
+using ReportSyncer.Core.Tests.Helpers;
 
-namespace ReportSyncer.Core.Tests.Configuration;
+namespace ReportSyncer.Core.Tests.UnitTests.Configuration;
 
 /// <summary>
 /// Unit tests for ConfigurationValidator (per Task2.3_TestPlan.md).
 /// </summary>
-[Trait("Category", "Unit")]
-[Trait("Component", "Configuration")]
+[Trait("Type", "UnitTest")]
+[Trait("Area", "Configuration")]
 public class ConfigurationValidatorTests
 {
     private readonly ConfigurationValidator _validator = new();

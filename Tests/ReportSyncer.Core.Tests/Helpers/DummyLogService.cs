@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DotNetToolkit.Logging;
 
-namespace ReportSyncer.Core.Tests.Testing
+namespace ReportSyncer.Core.Tests.Helpers
 {
     /// <summary>
     /// Minimal ILogService implementation for unit tests that performs no real logging.

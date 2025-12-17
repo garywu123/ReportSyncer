@@ -1,10 +1,10 @@
-using System;
-using Xunit;
 using ReportSyncer.Core.Configuration;
+using ReportSyncer.Core.Tests.Helpers;
 
-namespace ReportSyncer.Core.Tests.Configuration;
+namespace ReportSyncer.Core.Tests.UnitTests.Configuration;
 
-[Trait("Category", "Unit Test")]
+[Trait("Type", "UnitTest")]
+[Trait("Area", "Configuration")]
 public class ConfigurationMergerUnitTests
 {
     [Fact]
