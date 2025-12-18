@@ -2,6 +2,7 @@ using System.Data;
 using DotNetToolkit.Database.Abstractions;
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Exceptions;
+
 // ReSharper disable UnusedMember.Local
 
 namespace ReportSyncer.Core.Schema
@@ -9,20 +10,34 @@ namespace ReportSyncer.Core.Schema
     /// <summary>
     /// SQL Server implementation of <see cref="ISchemaInspector"/>.
     /// Uses a factory delegate to obtain an <see cref="IDbContext"/> for the provided <see cref="ConnectionConfig"/>.
+    /// <para>
+    /// Attention: If the supplied <paramref name="tables"/> list is empty the inspector returns an empty
+    /// <see cref="SchemaSnapshot"/> with <see cref="SchemaRole.Source"/>. When one or more tables are inspected
+    /// the returned snapshot uses <see cref="SchemaRole.Target"/> by convention. Callers should interpret the
+    /// reported <see cref="SchemaRole"/> appropriately when merging or comparing snapshots.
+    /// </para>
     /// </summary>
     public sealed class SqlServerSchemaInspector(
         Func<ConnectionConfig, IDbContext> dbContextFactory)
         : ISchemaInspector
     {
-        private readonly Func<ConnectionConfig, IDbContext> _dbContextFactory = dbContextFactory ?? throw new ArgumentNullException(nameof(dbContextFactory));
+        private readonly Func<ConnectionConfig, IDbContext> _dbContextFactory =
+            dbContextFactory ?? throw new ArgumentNullException(nameof(dbContextFactory));
 
-        public async Task<SchemaSnapshot> InspectAsync(ConnectionConfig connection, IEnumerable<TableIdentifier> tables, CancellationToken ct = default)
+        public async Task<SchemaSnapshot> InspectAsync(ConnectionConfig             connection,
+                                                       IEnumerable<TableIdentifier> tables,
+                                                       CancellationToken            ct = default)
         {
             ArgumentNullException.ThrowIfNull(connection);
             if (tables == null) throw new ArgumentNullException(nameof(tables));
 
             var requested = tables.ToList();
-            if (requested.Count == 0) return new SchemaSnapshot(Array.Empty<TableSchema>(), SchemaRole.Source);
+                // Attention: When no tables are requested we return an empty snapshot
+                // with Role = SchemaRole.Source. This represents a deliberate "no-op"
+                // inspection result and should be treated differently from an inspected
+                // target schema that contains tables.
+                if (requested.Count == 0)
+                    return new SchemaSnapshot(Array.Empty<TableSchema>(), SchemaRole.Source);
 
             try
             {
@@ -34,12 +49,17 @@ namespace ReportSyncer.Core.Schema
                 {
                     var cols = await LoadColumnsAsync(ctx, t, ct).ConfigureAwait(false);
                     if (cols == null || cols.Count == 0)
-                        throw new SchemaMismatchException($"Table not found or has no columns: {t}");
+                        throw new SchemaMismatchException(
+                            $"Table not found or has no columns: {t}"
+                        );
 
                     var pkCols = cols.Where(c => c.IsPrimaryKeyPart).Select(c => c.Name).ToList();
 
                     // create table schema with empty FK list for now; we'll attach FKs later
-                    var tableSchema = new TableSchema(t, cols, pkCols, Array.Empty<ForeignKeySchema>());
+                    var tableSchema = new TableSchema(
+                        t, cols, pkCols, Array.Empty<ForeignKeySchema>()
+                    );
+
                     tableSchemas.Add(tableSchema);
                 }
 
@@ -49,32 +69,36 @@ namespace ReportSyncer.Core.Schema
                 var fkSchemas = BuildForeignKeySchemas(fkRows);
 
                 // attach FKs where FromTable matches
-                var tableMap = tableSchemas.ToDictionary(ts => ts.Table, ts => ts, new TableIdentifierComparer());
+                var tableMap = tableSchemas.ToDictionary(
+                    ts => ts.Table, ts => ts, new TableIdentifierComparer()
+                );
 
                 foreach (var fk in fkSchemas)
                 {
                     if (!tableMap.TryGetValue(fk.FromTable, out var tsFrom)) continue;
                     var fks = tsFrom.ForeignKeys.ToList();
                     fks.Add(fk);
-                    var newTs = new TableSchema(tsFrom.Table, tsFrom.Columns, tsFrom.PrimaryKeyColumns, fks);
+                    var newTs = new TableSchema(
+                        tsFrom.Table, tsFrom.Columns, tsFrom.PrimaryKeyColumns, fks
+                    );
+
                     tableMap[fk.FromTable] = newTs;
                 }
 
                 var resultTables = tableMap.Values.ToList();
-                // Role is set to Target by convention for this inspector; caller can interpret accordingly.
+                // Attention: When tables are inspected we return Role = SchemaRole.Target by convention.
+                // Callers should consider the Role when combining or comparing snapshots (Source vs Target).
                 return new SchemaSnapshot(resultTables, SchemaRole.Target);
             }
-            catch (SchemaMismatchException)
-            {
-                throw;
-            }
+            catch (SchemaMismatchException) { throw; }
             catch (Exception ex)
             {
                 throw new SyncExecutionException("Failed to inspect schema: " + ex.Message, ex);
             }
         }
 
-        private async Task<List<ColumnSchema>> LoadColumnsAsync(IDbContext ctx, TableIdentifier table, CancellationToken ct)
+        private async Task<List<ColumnSchema>> LoadColumnsAsync(
+            IDbContext ctx, TableIdentifier table, CancellationToken ct)
         {
             const string sql = """
 
@@ -108,20 +132,23 @@ namespace ReportSyncer.Core.Schema
             var rows = await ctx.ExecuteQueryAsync<ColumnRow>(cmd, ct).ConfigureAwait(false);
 
             var result = rows.Select(r => new ColumnSchema(
-                r.ColumnName,
-                MapSqlTypeToClr(r.DataType),
-                r.DataType,
-                r.IsNullable,
-                r.IsIdentity,
-                r.IsPrimaryKeyPart,
-                r.MaxLength is null or 0 ? null : (int?)r.MaxLength
-            )).ToList();
+                        r.ColumnName,
+                        MapSqlTypeToClr(r.DataType),
+                        r.DataType,
+                        r.IsNullable,
+                        r.IsIdentity,
+                        r.IsPrimaryKeyPart,
+                        r.MaxLength is null or 0 ? null : (int?)r.MaxLength
+                    )
+                )
+               .ToList();
 
             return result;
         }
 
-        
-        private async Task<List<ForeignKeyRow>> LoadForeignKeysAsync(IDbContext ctx, CancellationToken ct)
+
+        private async Task<List<ForeignKeyRow>> LoadForeignKeysAsync(
+            IDbContext ctx, CancellationToken ct)
         {
             const string sql = @"
 SELECT fk.name AS ForeignKeyName,
@@ -138,23 +165,27 @@ JOIN sys.schemas sch_to ON tab_to.schema_id = sch_to.schema_id
 JOIN sys.columns col_to ON fkc.referenced_object_id = col_to.object_id AND fkc.referenced_column_id = col_to.column_id
 ORDER BY fk.name, fkc.constraint_column_id";
 
-            var cmd = ctx.CreateCommand(sql, CommandType.Text);
+            var cmd  = ctx.CreateCommand(sql, CommandType.Text);
             var rows = await ctx.ExecuteQueryAsync<ForeignKeyRow>(cmd, ct).ConfigureAwait(false);
             return rows;
         }
 
-        private static IReadOnlyList<ForeignKeySchema> BuildForeignKeySchemas(IEnumerable<ForeignKeyRow> fkRows)
+        private static IReadOnlyList<ForeignKeySchema> BuildForeignKeySchemas(
+            IEnumerable<ForeignKeyRow> fkRows)
         {
             var grouped = fkRows.GroupBy(r => r.ForeignKeyName, StringComparer.OrdinalIgnoreCase);
-            var result = new List<ForeignKeySchema>();
+            var result  = new List<ForeignKeySchema>();
 
             foreach (var g in grouped)
             {
-                var first = g.First();
+                var first  = g.First();
                 var fromId = new TableIdentifier(first.FromSchema, first.FromTable);
-                var toId = new TableIdentifier(first.ToSchema, first.ToTable);
-                var pairs = g.Select(x => new ColumnPair(x.FromColumn, x.ToColumn)).ToList();
-                var isCascade = string.Equals(first.DeleteAction, "CASCADE", StringComparison.OrdinalIgnoreCase);
+                var toId   = new TableIdentifier(first.ToSchema, first.ToTable);
+                var pairs  = g.Select(x => new ColumnPair(x.FromColumn, x.ToColumn)).ToList();
+                var isCascade = string.Equals(
+                    first.DeleteAction, "CASCADE", StringComparison.OrdinalIgnoreCase
+                );
+
                 var fk = new ForeignKeySchema(first.ForeignKeyName, fromId, toId, pairs, isCascade);
                 result.Add(fk);
             }
@@ -168,53 +199,53 @@ ORDER BY fk.name, fkc.constraint_column_id";
             sqlType = sqlType.ToLowerInvariant();
             return sqlType switch
             {
-                "int" => typeof(int),
-                "bigint" => typeof(long),
-                "smallint" => typeof(short),
-                "tinyint" => typeof(byte),
-                "bit" => typeof(bool),
-                "nvarchar" => typeof(string),
-                "varchar" => typeof(string),
-                "char" => typeof(string),
-                "nchar" => typeof(string),
-                "text" => typeof(string),
-                "ntext" => typeof(string),
-                "datetime" => typeof(DateTime),
-                "datetime2" => typeof(DateTime),
-                "smalldatetime" => typeof(DateTime),
-                "date" => typeof(DateTime),
-                "time" => typeof(TimeSpan),
+                "int"              => typeof(int),
+                "bigint"           => typeof(long),
+                "smallint"         => typeof(short),
+                "tinyint"          => typeof(byte),
+                "bit"              => typeof(bool),
+                "nvarchar"         => typeof(string),
+                "varchar"          => typeof(string),
+                "char"             => typeof(string),
+                "nchar"            => typeof(string),
+                "text"             => typeof(string),
+                "ntext"            => typeof(string),
+                "datetime"         => typeof(DateTime),
+                "datetime2"        => typeof(DateTime),
+                "smalldatetime"    => typeof(DateTime),
+                "date"             => typeof(DateTime),
+                "time"             => typeof(TimeSpan),
                 "uniqueidentifier" => typeof(Guid),
-                "decimal" => typeof(decimal),
-                "numeric" => typeof(decimal),
-                "float" => typeof(double),
-                "real" => typeof(float),
-                _ => typeof(object)
+                "decimal"          => typeof(decimal),
+                "numeric"          => typeof(decimal),
+                "float"            => typeof(double),
+                "real"             => typeof(float),
+                _                  => typeof(object)
             };
         }
 
         private sealed class ColumnRow
         {
-            public string SchemaName { get; set; } = string.Empty;
-            public string TableName { get; set; } = string.Empty;
-            public string ColumnName { get; set; } = string.Empty;
-            public string DataType { get; set; } = string.Empty;
-            public int? MaxLength { get; set; }
-            public bool IsNullable { get; set; }
-            public bool IsIdentity { get; set; }
-            public bool IsPrimaryKeyPart { get; set; }
+            public string SchemaName       { get; set; } = string.Empty;
+            public string TableName        { get; set; } = string.Empty;
+            public string ColumnName       { get; set; } = string.Empty;
+            public string DataType         { get; set; } = string.Empty;
+            public int?   MaxLength        { get; set; }
+            public bool   IsNullable       { get; set; }
+            public bool   IsIdentity       { get; set; }
+            public bool   IsPrimaryKeyPart { get; set; }
         }
 
         private sealed class ForeignKeyRow
         {
             public string ForeignKeyName { get; set; } = string.Empty;
-            public string FromSchema { get; set; } = string.Empty;
-            public string FromTable { get; set; } = string.Empty;
-            public string FromColumn { get; set; } = string.Empty;
-            public string ToSchema { get; set; } = string.Empty;
-            public string ToTable { get; set; } = string.Empty;
-            public string ToColumn { get; set; } = string.Empty;
-            public string DeleteAction { get; set; } = string.Empty;
+            public string FromSchema     { get; set; } = string.Empty;
+            public string FromTable      { get; set; } = string.Empty;
+            public string FromColumn     { get; set; } = string.Empty;
+            public string ToSchema       { get; set; } = string.Empty;
+            public string ToTable        { get; set; } = string.Empty;
+            public string ToColumn       { get; set; } = string.Empty;
+            public string DeleteAction   { get; set; } = string.Empty;
         }
 
         private sealed class TableIdentifierComparer : IEqualityComparer<TableIdentifier>
@@ -224,7 +255,7 @@ ORDER BY fk.name, fkc.constraint_column_id";
                 if (ReferenceEquals(x, y)) return true;
                 if (x is null || y is null) return false;
                 return StringComparer.OrdinalIgnoreCase.Equals(x.SchemaName, y.SchemaName)
-                       && StringComparer.OrdinalIgnoreCase.Equals(x.TableName, y.TableName);
+                 && StringComparer.OrdinalIgnoreCase.Equals(x.TableName, y.TableName);
             }
 
             public int GetHashCode(TableIdentifier obj)

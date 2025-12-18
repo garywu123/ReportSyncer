@@ -15,7 +15,7 @@ namespace ReportSyncer.Core.Tests.UnitTests.Schema;
 
 [Trait("Type", "UnitTest")]
 [Trait("Area", "Schema")]
-public class TableIdentifierTests
+public class TableIdentifierUnitTests
 {
     [Fact]
     public void Ctor_Rejects_Blank_Schema_Or_Table()

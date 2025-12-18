@@ -32,7 +32,6 @@ public sealed class SchemaSnapshot
 
     public TableSchema GetRequiredTable(TableIdentifier id)
     {
-        if (!_tables.TryGetValue(id, out var t)) throw new KeyNotFoundException($"Table not found: {id}");
-        return t;
+        return !_tables.TryGetValue(id, out var t) ? throw new KeyNotFoundException($"Table not found: {id}") : t;
     }
 }

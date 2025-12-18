@@ -3,7 +3,7 @@
 Audience: AI coder adding **unit tests only** (no integration/real DB) for ReportSyncer.Core schema work.
 
 ## Scope & Constraints
-- Project: `ReportSyncer.Tests` (follow existing folder/namespace patterns, e.g., `Schema`).
+- Project: `ReportSyncer.Tests` (follow existing folder/namespace patterns, e.g., If it is unit test, it should be placed in the `UnitTests` folder, then depends on the area, For example, testing Schema features, then placed under the `Schema` folder.).
 - Type: Unit tests only; no real SQL or LocalDB. Use mocks/stubs for DB abstractions.
 - Frameworks: xUnit, FluentAssertions, Moq (MockBehavior.Strict). Follow AAA.
 - Traits: add `[Trait("Type","Unit")]` and optionally `[Trait("Area","Schema")]`.
@@ -60,7 +60,9 @@ Test cases to cover:
    - Unexpected exception from `IDbContext` is wrapped in `SyncExecutionException` with message preserved.
 
 ## Test Structure & Setup Notes
-- Place tests under `Schema` folder/namespace (e.g., `ReportSyncer.Tests.Schema`).
+- Place tests under the `Schema` folder/namespace (`ReportSyncer.Core.Tests.UnitTests.Schema`) with **one test class per file** (e.g., `TableIdentifierTests.cs`, `ColumnSchemaTests.cs`, `ColumnPairTests.cs`).
+- At the top of each test file include `// ReSharper disable ObjectCreationAsStatement` and `#pragma warning disable CA1806` because constructors are invoked for guard checks without storing the instance.
+- Tag tests with `[Trait("Type","Unit")]` and `[Trait("Area","Schema")]`; keep integration tests in separate files/folders (e.g., `Schema/Integration`) and mark them `[Trait("Type","Integration")]` if added later.
 - Use minimal DTOs/builders for row projections used by `SqlServerSchemaInspector` to simulate query results.
 - For mocks, set up `IDbContext.CreateCommand(...)`, parameter adds, and `ExecuteQueryAsync<T>` returns per test needs; verify key calls when meaningful.
 - Prefer helper methods to build `TableIdentifier`, column rows, FK rows to keep Arrange sections concise.

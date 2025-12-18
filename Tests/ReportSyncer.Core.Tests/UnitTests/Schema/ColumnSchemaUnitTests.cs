@@ -14,7 +14,7 @@ using ReportSyncer.Core.Schema;
 namespace ReportSyncer.Core.Tests.UnitTests.Schema;
 [Trait("Type", "UnitTest")]
 [Trait("Area", "Schema")]
-public class ColumnSchemaTests
+public class ColumnSchemaUnitTests
 {
     [Fact]
     public void Ctor_Rejects_Blank_Name()
