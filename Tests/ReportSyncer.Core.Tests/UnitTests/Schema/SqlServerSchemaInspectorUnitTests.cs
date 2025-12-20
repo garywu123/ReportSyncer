@@ -160,7 +160,7 @@ public class SqlServerSchemaInspectorUnitTests
 
         var inspector = new SqlServerSchemaInspector(_ => fake);
         var snap = await inspector.InspectAsync(
-            MakeConn(), new[] { new TableIdentifier("dbo", "Child") }
+            MakeConn(), [new TableIdentifier("dbo", "Child")]
         );
 
         var ts = snap.Tables.Single();
