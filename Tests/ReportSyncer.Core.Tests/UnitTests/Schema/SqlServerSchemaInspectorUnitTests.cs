@@ -21,9 +21,15 @@ public class SqlServerSchemaInspectorUnitTests
     public async Task InspectAsync_Throws_On_Null_Connection()
     {
         var inspector = new SqlServerSchemaInspector(_ => new FakeDbContext());
-        Func<Task> act = async () => await inspector.InspectAsync(
-            null!, new[] { new TableIdentifier("dbo", "T") }
-        );
+        var reqNullConn = new SchemaInspectionRequest
+        {
+            Connection = null!,
+            Tables = new[] { new TableIdentifier("dbo", "T") },
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        Func<Task> act = async () => await inspector.InspectAsync(reqNullConn);
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
@@ -31,8 +37,16 @@ public class SqlServerSchemaInspectorUnitTests
     [Fact]
     public async Task InspectAsync_Throws_On_Null_Tables()
     {
-        var        inspector = new SqlServerSchemaInspector(_ => new FakeDbContext());
-        Func<Task> act       = async () => await inspector.InspectAsync(MakeConn(), null!);
+        var inspector = new SqlServerSchemaInspector(_ => new FakeDbContext());
+        var reqNullTables = new SchemaInspectionRequest
+        {
+            Connection = MakeConn(),
+            Tables = null!,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        Func<Task> act = async () => await inspector.InspectAsync(reqNullTables);
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
@@ -40,10 +54,18 @@ public class SqlServerSchemaInspectorUnitTests
     public async Task InspectAsync_Returns_Empty_Snapshot_For_Empty_Request()
     {
         var inspector = new SqlServerSchemaInspector(_ => new FakeDbContext());
-        var snap      = await inspector.InspectAsync(MakeConn(), Array.Empty<TableIdentifier>());
+        var reqEmpty = new SchemaInspectionRequest
+        {
+            Connection = MakeConn(),
+            Tables = Array.Empty<TableIdentifier>(),
+            Role = SchemaRole.Source,
+            Level = SchemaInspectionLevel.ExistenceOnly
+        };
+
+        var snap = await inspector.InspectAsync(reqEmpty);
         snap.Tables.Should().BeEmpty();
-        // If the table is empty, then the role would be the source.
         snap.Role.Should().Be(SchemaRole.Source);
+        snap.Level.Should().Be(SchemaInspectionLevel.ExistenceOnly);
     }
 
     [Fact]
@@ -53,9 +75,15 @@ public class SqlServerSchemaInspectorUnitTests
         // no columns for dbo.Missing
         var inspector = new SqlServerSchemaInspector(_ => fake);
 
-        Func<Task> act = async () => await inspector.InspectAsync(
-            MakeConn(), [new TableIdentifier("dbo", "Missing")]
-        );
+        var req = new SchemaInspectionRequest
+        {
+            Connection = MakeConn(),
+            Tables = new[] { new TableIdentifier("dbo", "Missing") },
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        Func<Task> act = async () => await inspector.InspectAsync(req);
 
         await act.Should()
            .ThrowAsync<SchemaMismatchException>()
@@ -95,9 +123,15 @@ public class SqlServerSchemaInspectorUnitTests
 
         // no FK rows
         var inspector = new SqlServerSchemaInspector(_ => fake);
-        var snap = await inspector.InspectAsync(
-            MakeConn(), [new TableIdentifier("dbo", "T")]
-        );
+        var req = new SchemaInspectionRequest
+        {
+            Connection = MakeConn(),
+            Tables = new[] { new TableIdentifier("dbo", "T") },
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snap = await inspector.InspectAsync(req);
 
         snap.Tables.Should().HaveCount(1);
         var ts = snap.Tables.First();
@@ -159,9 +193,15 @@ public class SqlServerSchemaInspectorUnitTests
         ];
 
         var inspector = new SqlServerSchemaInspector(_ => fake);
-        var snap = await inspector.InspectAsync(
-            MakeConn(), [new TableIdentifier("dbo", "Child")]
-        );
+        var reqFk = new SchemaInspectionRequest
+        {
+            Connection = MakeConn(),
+            Tables = new[] { new TableIdentifier("dbo", "Child") },
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snap = await inspector.InspectAsync(reqFk);
 
         var ts = snap.Tables.Single();
         ts.ForeignKeys.Should().HaveCount(1);
@@ -207,8 +247,16 @@ public class SqlServerSchemaInspectorUnitTests
         ];
 
         var inspector = new SqlServerSchemaInspector(_ => fake);
-        var snap      = await inspector.InspectAsync(MakeConn(), [new TableIdentifier("dbo", "A")]);
-        var ts        = snap.Tables.Single();
+        var reqA = new SchemaInspectionRequest
+        {
+            Connection = MakeConn(),
+            Tables = new[] { new TableIdentifier("dbo", "A") },
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snap = await inspector.InspectAsync(reqA);
+        var ts = snap.Tables.Single();
         ts.ForeignKeys.Should().BeEmpty();
     }
 
@@ -232,19 +280,33 @@ public class SqlServerSchemaInspectorUnitTests
         ];
 
         var inspector = new SqlServerSchemaInspector(_ => fake);
-        var snap      = await inspector.InspectAsync(MakeConn(), [new TableIdentifier("dbo", "X")]);
-        var col       = snap.Tables.Single().GetColumn("F");
+        var reqX = new SchemaInspectionRequest
+        {
+            Connection = MakeConn(),
+            Tables = new[] { new TableIdentifier("dbo", "X") },
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snap = await inspector.InspectAsync(reqX);
+        var col = snap.Tables.Single().GetColumn("F");
         col!.ClrType.Should().Be(typeof(object));
     }
 
     [Fact]
     public async Task InspectAsync_Wraps_Unexpected_Exception_In_SyncExecutionException()
     {
-        var bad       = new BadDbContext();
+        var bad = new BadDbContext();
         var inspector = new SqlServerSchemaInspector(_ => bad);
-        Func<Task> act = async () => await inspector.InspectAsync(
-            MakeConn(), [new TableIdentifier("dbo", "T")]
-        );
+        var reqBad = new SchemaInspectionRequest
+        {
+            Connection = MakeConn(),
+            Tables = new[] { new TableIdentifier("dbo", "T") },
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        Func<Task> act = async () => await inspector.InspectAsync(reqBad);
 
         await act.Should()
            .ThrowAsync<SyncExecutionException>()

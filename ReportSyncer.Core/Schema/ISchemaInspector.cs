@@ -13,7 +13,7 @@ public interface ISchemaInspector
     /// Inspect the specified tables on the provided connection and return a <see cref="SchemaSnapshot"/>.
     /// </summary>
     /// <param name="connection">Connection configuration (not a YAML dependency; passed from upper layers).</param>
-    /// <param name="tables">Tables to inspect (only these tables must be returned).</param>
+    /// <param name="request">Inspection request containing connection, tables, role and level.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<SchemaSnapshot> InspectAsync(ConnectionConfig connection, IEnumerable<TableIdentifier> tables, CancellationToken ct = default);
+    Task<SchemaSnapshot> InspectAsync(SchemaInspectionRequest request, CancellationToken ct = default);
 }

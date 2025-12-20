@@ -1,6 +1,7 @@
 using DotNetToolkit.Database.Abstractions;
 using FluentAssertions;
 using ReportSyncer.Core.Configuration;
+using System.Threading;
 using ReportSyncer.Core.Exceptions;
 using ReportSyncer.Core.Schema;
 
@@ -28,11 +29,42 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
             "test", fixture.ConnectionString!, EnvironmentType.Dev, ConnectionType.Application
         );
 
-        var snapshot = await inspector.InspectAsync(
-            connConfig, Enumerable.Empty<TableIdentifier>(), CancellationToken.None
+        var reqEmpty = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = Array.Empty<TableIdentifier>(),
+            Role = SchemaRole.Source,
+            Level = SchemaInspectionLevel.ExistenceOnly
+        };
+
+        var snapshot = await inspector.InspectAsync(reqEmpty, CancellationToken.None);
+
+        snapshot.Role.Should().Be(reqEmpty.Role);
+        snapshot.Tables.Should().BeEmpty();
+    }
+
+    [SkippableFact]
+    public async Task InspectAsync_WithEmptyTables_PreservesGivenRole_Target()
+    {
+        CheckSkip();
+        var factory = fixture.CreateDbContextFactory();
+        var inspector = new SqlServerSchemaInspector(factory);
+
+        var connConfig = new ConnectionConfig(
+            "test", fixture.ConnectionString!, EnvironmentType.Dev, ConnectionType.Application
         );
 
-        snapshot.Role.Should().Be(SchemaRole.Source);
+        var reqTarget = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = Array.Empty<TableIdentifier>(),
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.ExistenceOnly
+        };
+
+        var snapshot = await inspector.InspectAsync(reqTarget, CancellationToken.None);
+
+        snapshot.Role.Should().Be(SchemaRole.Target);
         snapshot.Tables.Should().BeEmpty();
     }
 
@@ -48,7 +80,15 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
         );
 
         var tables   = new[] { new TableIdentifier("rs_test", "Customers") };
-        var snapshot = await inspector.InspectAsync(connConfig, tables, CancellationToken.None);
+        var req = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snapshot = await inspector.InspectAsync(req, CancellationToken.None);
 
         snapshot.Tables.Should().ContainSingle();
         var t = snapshot.Tables.Single();
@@ -75,6 +115,124 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
     }
 
     [SkippableFact]
+    public async Task InspectAsync_ExistenceOnly_WithExistingTables_ReturnsMinimalSchemas()
+    {
+        CheckSkip();
+        var factory = fixture.CreateDbContextFactory();
+        var inspector = new SqlServerSchemaInspector(factory);
+
+        var connConfig = new ConnectionConfig(
+            "test", fixture.ConnectionString!, EnvironmentType.Dev, ConnectionType.Application
+        );
+
+        var tables = new[] { new TableIdentifier("rs_test", "Customers") };
+        var req = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.ExistenceOnly
+        };
+
+        var snapshot = await inspector.InspectAsync(req, CancellationToken.None);
+
+        snapshot.Level.Should().Be(SchemaInspectionLevel.ExistenceOnly);
+        snapshot.Tables.Should().NotBeEmpty();
+        var ts = snapshot.Tables.Single();
+        ts.Columns.Should().BeEmpty();
+        ts.PrimaryKeyColumns.Should().BeEmpty();
+        ts.ForeignKeys.Should().BeEmpty();
+    }
+
+    [SkippableFact]
+    public async Task InspectAsync_ExistenceOnly_MissingTable_Throws_ForBothRoles()
+    {
+        CheckSkip();
+        var factory = fixture.CreateDbContextFactory();
+        var inspector = new SqlServerSchemaInspector(factory);
+
+        var connConfig = new ConnectionConfig(
+            "test", fixture.ConnectionString!, EnvironmentType.Dev, ConnectionType.Application
+        );
+
+        var missing = new[] { new TableIdentifier("rs_test", "NoSuchTable") };
+
+        foreach (var role in new[] { SchemaRole.Source, SchemaRole.Target })
+        {
+            var req = new SchemaInspectionRequest
+            {
+                Connection = connConfig,
+                Tables = missing,
+                Role = role,
+                Level = SchemaInspectionLevel.ExistenceOnly
+            };
+
+            Func<Task> act = async () => await inspector.InspectAsync(req, CancellationToken.None);
+
+            await act.Should()
+               .ThrowAsync<SchemaMismatchException>()
+               .Where(e => e.Message.Contains("NoSuchTable"));
+        }
+    }
+
+    [SkippableFact]
+    public async Task InspectAsync_Full_WithSourceRole_ReturnsFullMetadata()
+    {
+        CheckSkip();
+        var factory = fixture.CreateDbContextFactory();
+        var inspector = new SqlServerSchemaInspector(factory);
+
+        var connConfig = new ConnectionConfig(
+            "test", fixture.ConnectionString!, EnvironmentType.Dev, ConnectionType.Application
+        );
+
+        var tables = new[] { new TableIdentifier("rs_test", "Customers") };
+        var req = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Source,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snapshot = await inspector.InspectAsync(req, CancellationToken.None);
+
+        snapshot.Level.Should().Be(SchemaInspectionLevel.Full);
+        snapshot.Tables.Should().ContainSingle();
+        var ts = snapshot.Tables.Single();
+        ts.Columns.Should().NotBeEmpty();
+        ts.PrimaryKeyColumns.Should().NotBeEmpty();
+    }
+
+    [SkippableFact]
+    public async Task InspectAsync_RespectsCancellationToken()
+    {
+        CheckSkip();
+        var factory = fixture.CreateDbContextFactory();
+        var inspector = new SqlServerSchemaInspector(factory);
+
+        var connConfig = new ConnectionConfig(
+            "test", fixture.ConnectionString!, EnvironmentType.Dev, ConnectionType.Application
+        );
+
+        var tables = new[] { new TableIdentifier("rs_test", "Customers") };
+        var req = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Func<Task> act = async () => await inspector.InspectAsync(req, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [SkippableFact]
     public async Task InspectAsync_WithForeignKeyCascade_ReturnsFkWithPairsAndCascadeFlag()
     {
         CheckSkip();
@@ -92,7 +250,15 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
             new TableIdentifier("rs_test", "Orders")
         };
 
-        var snapshot = await inspector.InspectAsync(connConfig, tables, CancellationToken.None);
+        var req = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snapshot = await inspector.InspectAsync(req, CancellationToken.None);
 
         var orders = snapshot.Tables.Single(t => string.Equals(
                 t.Table.TableName, "Orders", StringComparison.OrdinalIgnoreCase
@@ -124,7 +290,15 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
             new TableIdentifier("rs_test", "Children")
         };
 
-        var snapshot = await inspector.InspectAsync(connConfig, tables, CancellationToken.None);
+        var req = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snapshot = await inspector.InspectAsync(req, CancellationToken.None);
 
         var children = snapshot.Tables.Single(t => string.Equals(
                 t.Table.TableName, "Children", StringComparison.OrdinalIgnoreCase
@@ -150,8 +324,15 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
 
         var tables = new[] { new TableIdentifier("rs_test", "Nope") };
 
-        Func<Task> act = async ()
-            => await inspector.InspectAsync(connConfig, tables, CancellationToken.None);
+        var reqMissing = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        Func<Task> act = async () => await inspector.InspectAsync(reqMissing, CancellationToken.None);
 
         await act.Should()
            .ThrowAsync<SchemaMismatchException>()
@@ -170,7 +351,15 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
         );
 
         var tables   = new[] { new TableIdentifier("rs_test", "WeirdTypes") };
-        var snapshot = await inspector.InspectAsync(connConfig, tables, CancellationToken.None);
+        var reqWeird = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snapshot = await inspector.InspectAsync(reqWeird, CancellationToken.None);
 
         var t = snapshot.Tables.Single();
         var col = t.Columns.Single(c => c.Name.Equals("Payload", StringComparison.OrdinalIgnoreCase)
@@ -191,7 +380,15 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
         );
 
         var tables   = new[] { new TableIdentifier("rs_test", "OrderLines") };
-        var snapshot = await inspector.InspectAsync(connConfig, tables, CancellationToken.None);
+        var reqOL = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snapshot = await inspector.InspectAsync(reqOL, CancellationToken.None);
 
         var ol = snapshot.Tables.Single(t => string.Equals(
                 t.Table.TableName, "OrderLines", StringComparison.OrdinalIgnoreCase
@@ -218,9 +415,15 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
             "test", "Server=bad;Database=bad;", EnvironmentType.Dev, ConnectionType.Application
         );
 
-        Func<Task> act = async () => await inspector.InspectAsync(
-            connConfig, new[] { new TableIdentifier("rs_test", "test") }, CancellationToken.None
-        );
+        var reqBad = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = new[] { new TableIdentifier("rs_test", "test") },
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        Func<Task> act = async () => await inspector.InspectAsync(reqBad, CancellationToken.None);
 
         await act.Should().ThrowAsync<SyncExecutionException>();
     }

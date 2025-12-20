@@ -16,15 +16,18 @@ public sealed class SchemaSnapshot
 {
     private readonly IReadOnlyDictionary<TableIdentifier, TableSchema> _tables;
 
-    public SchemaSnapshot(IEnumerable<TableSchema> tables, SchemaRole role)
+    public SchemaSnapshot(IEnumerable<TableSchema> tables, SchemaRole role, SchemaInspectionLevel level)
     {
         if (tables is null) throw new ArgumentNullException(nameof(tables));
-        Role = role;
+        Role  = role;
+        Level = level;
         // TableIdentifier implements case-insensitive equality for names.
         _tables = tables.ToDictionary(t => t.Table, t => t);
     }
 
     public SchemaRole Role { get; }
+
+    public SchemaInspectionLevel Level { get; }
 
     public IReadOnlyCollection<TableSchema> Tables => _tables.Values.ToList();
 
