@@ -9,8 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DotNetToolkit\DotNetToolkit.Database\DotNetToolkit.Database.csproj" />
-    <ProjectReference Include="..\..\DotNetToolkit\DotNetToolkit.Logging\DotNetToolkit.Logging.csproj" />
+  <ProjectReference Include="..\..\DotNetToolkit\DotNetToolkit.Database\DotNetToolkit.Database.csproj" />
+  <ProjectReference Include="..\..\DotNetToolkit\DotNetToolkit.Logging\DotNetToolkit.Logging.csproj" />
+  <ProjectReference Include="..\..\DotNetToolkit\DotNetToolkit.General\DotNetToolkit.General.csproj" />
   </ItemGroup>
 
   <ItemGroup>

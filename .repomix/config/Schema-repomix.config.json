@@ -11,7 +11,7 @@
     "removeEmptyLines": true,
     "topFilesLength": 5,
     "showLineNumbers": false,
-    "copyToClipboard": true,
+    "copyToClipboard": false,
     "includeEmptyDirectories": false,
     "compress": true
   },

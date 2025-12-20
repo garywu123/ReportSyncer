@@ -3,13 +3,19 @@
     "Schema-407": {
       "name": "Schema",
       "created": "2025-12-19T08:50:46.882Z",
-      "lastUsed": "2025-12-19T08:56:21.483Z",
+      "lastUsed": "2025-12-20T06:33:10.567Z",
       "tags": [],
       "files": [
-        "../DotNetToolkit/DotNetToolkit.TestHelper",
-        "Tests/ReportSyncer.Core.Tests/IntegrationTests",
-        "Tests/ReportSyncer.Core.Tests/Helpers",
-        "ReportSyncer.Core/Schema"
+        "ReportSyncer.Core/Schema/ColumnSchema.cs",
+        "ReportSyncer.Core/Schema/ForeignKeySchema.cs",
+        "ReportSyncer.Core/Schema/ISchemaInspector.cs",
+        "ReportSyncer.Core/Schema/SchemaSnapshot.cs",
+        "ReportSyncer.Core/Schema/SqlServerSchemaInspector.cs",
+        "ReportSyncer.Core/Schema/TableIdentifier.cs",
+        "ReportSyncer.Core/Schema/TableSchema.cs",
+        "Tests/ReportSyncer.Core.Tests/IntegrationTests/Schema",
+        "Tests/ReportSyncer.Core.Tests/UnitTests/Schema",
+        "Tests/ReportSyncer.Core.Tests/Helpers"
       ],
       "configPath": ".repomix/config/Schema-repomix.config.json"
     }
