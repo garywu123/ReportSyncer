@@ -225,7 +225,7 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
         };
 
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync();
 
         Func<Task> act = async () => await inspector.InspectAsync(req, cts.Token);
 

@@ -120,6 +120,7 @@ public sealed class SqlServerSchemaInspector(
             return new SchemaSnapshot(tablesFull, request.Role, SchemaInspectionLevel.Full);
         }
         catch (SchemaMismatchException) { throw; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             throw new SyncExecutionException("Failed to inspect schema: " + ex.Message, ex);
