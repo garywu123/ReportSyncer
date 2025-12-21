@@ -1,0 +1,52 @@
+version: "1.0"
+run:
+  dryRun: true
+  defaultBatchSize: 1000
+  deleteChunkSize: 500
+  useTvpIfAvailable: false
+safety:
+  forbidProdToProd: false
+  requireDifferentConnections: false
+  confirmLargeDeletePct: 0.20
+schemaPolicy:
+  onMismatch: "Warn"
+  requirePrimaryKey: false
+  allowExtraTargetColumns: true
+connections:
+  - name: "SourceDB"
+    connectionString: "Server=source;Database=SrcDB;User Id=sa;Password=Pass123;"
+    environment: "Dev"
+    type: "Application"
+  - name: "TargetDB"
+    connectionString: "Server=target;Database=TgtDB;User Id=sa;Password=Pass456;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "ExplicitMappingsOnlyJob"
+    description: "Test job with tables that have only explicitMappings (no addedColumns)"
+    sourceConnection: "SourceDB"
+    targetConnection: "TargetDB"
+    parameters:
+      CustomerId: "123"
+    tables:
+      - source: "dbo.Products"
+        target: "dbo.Products_Target"
+        enabled: true
+        columnMapping:
+          automapByName: false
+          explicitMappings:
+            ProductId: "ProductKey"
+            ProductName: "Name"
+            Price: "UnitPrice"
+        keys:
+          businessKey: ["ProductId"]
+      - source: "dbo.Categories"
+        target: "dbo.Categories_Target"
+        enabled: true
+        columnMapping:
+          automapByName: true
+          explicitMappings:
+            CategoryId: "CatId"
+            CategoryName: "CatName"
+        keys:
+          businessKey: ["CategoryId"]

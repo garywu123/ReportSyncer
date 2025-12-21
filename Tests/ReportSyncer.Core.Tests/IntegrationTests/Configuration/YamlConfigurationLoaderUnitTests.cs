@@ -177,4 +177,50 @@ public class YamlConfigurationLoaderUnitTests
         Assert.Equal("{StartDate}", table.Filter!.StartDate);
         Assert.Equal("{EndDate}", table.Filter!.EndDate);
     }
+
+    [Fact]
+    public async Task LoadAsync_WithExplicitMappingsOnly_PreservesColumnMappingConfig()
+    {
+        // Arrange
+        var path = GetTestFilePath("sync_explicitMappings_only.yaml");
+        Assert.True(File.Exists(path), $"Test YAML not found: {path}");
+
+        var loader = new YamlConfigurationLoader(new DummyLogService());
+
+        // Act
+        var cfg = await loader.LoadAsync(path, CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(cfg);
+        var job = cfg.SyncJobs.Single(j => j.Name == "ExplicitMappingsOnlyJob");
+        Assert.NotNull(job);
+        Assert.Equal(2, job.Tables.Count);
+
+        // Verify first table: automapByName=false + explicitMappings (no addedColumns)
+        var productsTable = job.Tables[0];
+        Assert.Equal("dbo.Products", productsTable.Source);
+        Assert.Equal("dbo.Products_Target", productsTable.Target);
+        Assert.NotNull(productsTable.ColumnMapping);
+        Assert.False(productsTable.ColumnMapping.AutomapByName);
+        Assert.NotNull(productsTable.ColumnMapping.ExplicitMappings);
+        Assert.Equal(3, productsTable.ColumnMapping.ExplicitMappings.Count);
+        Assert.Equal("ProductKey", productsTable.ColumnMapping.ExplicitMappings["ProductId"]);
+        Assert.Equal("Name", productsTable.ColumnMapping.ExplicitMappings["ProductName"]);
+        Assert.Equal("UnitPrice", productsTable.ColumnMapping.ExplicitMappings["Price"]);
+        Assert.NotNull(productsTable.ColumnMapping.AddedColumns);
+        Assert.Empty(productsTable.ColumnMapping.AddedColumns);
+
+        // Verify second table: automapByName=true + explicitMappings (no addedColumns)
+        var categoriesTable = job.Tables[1];
+        Assert.Equal("dbo.Categories", categoriesTable.Source);
+        Assert.Equal("dbo.Categories_Target", categoriesTable.Target);
+        Assert.NotNull(categoriesTable.ColumnMapping);
+        Assert.True(categoriesTable.ColumnMapping.AutomapByName);
+        Assert.NotNull(categoriesTable.ColumnMapping.ExplicitMappings);
+        Assert.Equal(2, categoriesTable.ColumnMapping.ExplicitMappings.Count);
+        Assert.Equal("CatId", categoriesTable.ColumnMapping.ExplicitMappings["CategoryId"]);
+        Assert.Equal("CatName", categoriesTable.ColumnMapping.ExplicitMappings["CategoryName"]);
+        Assert.NotNull(categoriesTable.ColumnMapping.AddedColumns);
+        Assert.Empty(categoriesTable.ColumnMapping.AddedColumns);
+    }
 }

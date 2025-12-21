@@ -6,40 +6,10 @@
 // Description: YAML-based implementation of IConfigurationLoader using YamlDotNet.
 // ============================================================================
 
-/*
-Pseudocode / Plan (detailed):
-
-- Add XML documentation to the entire file:
-  - File-level header already present; update date to today (2025-12-02).
-  - For class `YamlConfigurationLoader`:
-    - Add <summary> describing responsibility.
-    - Add <example> showing typical usage.
-    - Add <remarks> about error wrapping and strict top-level key validation.
-  - For constructor:
-    - Add <summary> and <param> for ILogService.
-  - For public method `LoadAsync`:
-    - Add <summary>, <param> for path and CancellationToken, <returns>, and <exception> tags for ConfigurationException and ArgumentException.
-    - Document behavior: reads file, validates top-level keys, deserializes DTO, maps to domain, and wraps unexpected exceptions.
-  - For internal static helpers `ReadFileAsync`, `LoadRootNode`, `ValidateTopLevelKeys`:
-    - Add <summary>, <param>, <returns>, and document thrown ConfigurationException for invalid YAML.
-  - For private methods `DeserializeRootDtoAsync`, `MapToDomain`, `ParseEnumOrThrow`:
-    - Add <summary>, <param>, <returns>, and note about YAML parse errors and configuration validation.
-  - For DTO classes and region:
-    - Add <summary> for the DTO region and each DTO class describing its role (intermediate mapping target for YAML).
-    - Keep property docs minimal or omitted except where helpful.
-  - Use CDATA inside <code> blocks in <example> or <remarks> per project doc rules.
-- Preserve existing logic and signatures exactly.
-- Ensure XML doc comments do not alter compile-time behavior.
-- Keep comments concise yet sufficient for automated documentation generation and code readers.
-*/
-
 using DotNetToolkit.Logging;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
-// ReSharper disable ClassNeverInstantiated.Local
-// ReSharper disable UnusedAutoPropertyAccessor.Local
-// ReSharper disable MemberCanBePrivate.Global
 
 namespace ReportSyncer.Core.Configuration
 {
@@ -53,15 +23,6 @@ namespace ReportSyncer.Core.Configuration
     /// into the domain <see cref="SyncConfiguration"/> model. Parsing errors and structural
     /// validation errors are surfaced as <see cref="ConfigurationException"/>.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// <![CDATA[
-    /// // Example usage:
-    /// var loader = new YamlConfigurationLoader(logService);
-    /// var config = await loader.LoadAsync("C:\\configs\\sync.yaml", CancellationToken.None);
-    /// ]]>
-    /// </code>
-    /// </example>
     public class YamlConfigurationLoader : IConfigurationLoader
     {
         /// <summary>
@@ -346,22 +307,24 @@ namespace ReportSyncer.Core.Configuration
                                     }
 
                                     ColumnMappingConfig? mapping = null;
-                                    var added = t.ColumnMapping?.AddedColumns?.Select(a
-                                        => a is { ColumnName: not null, Value: not null }
-                                            ? new AddedColumnMappingConfig(a.ColumnName, a.Value)
-                                            : null
-                                    );
+                                    if (t.ColumnMapping != null)
+                                    {
+                                        var explicitMappings = t.ColumnMapping.ExplicitMappings != null
+                                            ? new Dictionary<string, string>(t.ColumnMapping.ExplicitMappings)
+                                            : new Dictionary<string, string>();
 
-                                    if (added != null)
+                                        var addedCols = t.ColumnMapping.AddedColumns
+                                            ?.Where(a => a != null && a.ColumnName != null && a.Value != null)
+                                            .Select(a => new AddedColumnMappingConfig(a!.ColumnName!, a!.Value!))
+                                            .ToArray()
+                                            ?? Array.Empty<AddedColumnMappingConfig>();
+
                                         mapping = new ColumnMappingConfig(
-                                            t.ColumnMapping is { AutomapByName: true },
-                                            t.ColumnMapping?.ExplicitMappings != null
-                                                ? new Dictionary<string, string>(
-                                                    t.ColumnMapping.ExplicitMappings
-                                                )
-                                                : null,
-                                            added!
+                                            t.ColumnMapping.AutomapByName,
+                                            explicitMappings,
+                                            addedCols
                                         );
+                                    }
 
                                     KeyConfig? keys = null;
                                     if (t.Keys != null && t.Keys.BusinessKey != null)
