@@ -1,6 +1,4 @@
-
-# Copilot instructions for ReportSyncer & DotNetToolkit
-
+# copilot #ReportSyncer  
 ## Overview
 This document describes guidance for working across the ReportSyncer solution and the shared DotNetToolkit libraries. It covers repository contents, C# generation rules, layering constraints, exception usage, guidance for adding new behavior, and code style requirements.
 
@@ -14,6 +12,12 @@ DotNetToolkit contains shared infrastructure libraries used by ReportSyncer and 
 - `DotNetToolkit.Database`: database abstraction layer used across products.
 - `DotNetToolkit.Logging`: logging abstractions.
 
+
+### Addtional Instructions
+- .github/instructions/report-syncer-core.instructions.mdL: Rules for code inside ReportSyncer.Core (domain layer)
+- .github/instructions/tests.instructions.md: Rules for writing tests in ReportSyncer.Tests
+- .github/instructions/dotnetoolkit.instructions.md: Rules for contributing to DotNetToolkit libraries
+
 ### Documentation
 Canonical backend docs live in `docs/`:
 - `10_Product Requirements Document.instruction.md`
@@ -22,7 +26,7 @@ Canonical backend docs live in `docs/`:
 - `40_Backend Implementation Plan.md`
 
 ## C# Generation Guidelines
-- **Target:** `net8.0` and modern C# 8 features (records, pattern matching).
+- **Target:** `net10.0` and modern C# features (records, pattern matching, array and collection initializers, `async`/`await`, nullable reference types, object and collection initializers, etc.).
 - **DI:** Use `Microsoft.Extensions.DependencyInjection` for DI abstractions.
 - **Logging:** From domain code, log via `DotNetToolkit.Logging.ILogService` only. Hosts may wire Serilog; do not use Serilog directly in `ReportSyncer.Core`.
 - **Database:** Use `DotNetToolkit.Database` abstractions (`IDbContext`, `IDbCommandWrapper`, etc.) for DB access. Do not use Entity Framework.

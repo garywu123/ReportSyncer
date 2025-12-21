@@ -3,7 +3,7 @@
     "Schema-407": {
       "name": "Schema",
       "created": "2025-12-19T08:50:46.882Z",
-      "lastUsed": "2025-12-20T06:33:10.567Z",
+      "lastUsed": "2025-12-21T03:00:50.918Z",
       "tags": [],
       "files": [
         "ReportSyncer.Core/Schema/ColumnSchema.cs",
@@ -18,6 +18,20 @@
         "Tests/ReportSyncer.Core.Tests/Helpers"
       ],
       "configPath": ".repomix/config/Schema-repomix.config.json"
+    },
+    "ConfigWithMapRepo-845": {
+      "name": "ConfigWithMapRepo",
+      "description": "Configuration, Schema, Mapper",
+      "created": "2025-12-21T02:12:35.211Z",
+      "lastUsed": "2025-12-21T03:02:14.954Z",
+      "tags": [],
+      "files": [
+        "ReportSyncer.Core/Configuration",
+        "ReportSyncer.Core/Schema",
+        "Tests/ReportSyncer.Core.Tests/UnitTests/Configuration/ConfigurationValidatorUnitTests.cs",
+        "Tests/ReportSyncer.Core.Tests/UnitTests/Schema/Mapping/SchemaMapperTests.cs"
+      ],
+      "configPath": ".repomix/config/ConfigWithMapRepo-repomix.config.json"
     }
   }
 }
