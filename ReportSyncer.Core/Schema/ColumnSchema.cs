@@ -13,6 +13,8 @@ public sealed class ColumnSchema
     public bool   IsIdentity       { get; }
     public bool   IsPrimaryKeyPart { get; }
     public int?   MaxLength        { get; }
+    public bool   IsComputed       { get; }
+    public bool   IsRowVersion     { get; }
 
     public ColumnSchema(string name,
                         Type   clrType,
@@ -20,7 +22,9 @@ public sealed class ColumnSchema
                         bool   isNullable,
                         bool   isIdentity,
                         bool   isPrimaryKeyPart,
-                        int?   maxLength)
+                        int?   maxLength,
+                        bool   isComputed = false,
+                        bool   isRowVersion = false)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Column name must be provided", nameof(name));
@@ -32,5 +36,7 @@ public sealed class ColumnSchema
         IsIdentity = isIdentity;
         IsPrimaryKeyPart = isPrimaryKeyPart;
         MaxLength = maxLength;
+        IsComputed = isComputed;
+        IsRowVersion = isRowVersion;
     }
 }

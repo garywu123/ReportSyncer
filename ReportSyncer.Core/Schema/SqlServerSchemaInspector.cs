@@ -40,6 +40,8 @@ public sealed class SqlServerSchemaInspector(
            c.max_length AS MaxLength,
            c.is_nullable AS IsNullable,
            ic.is_identity AS IsIdentity,
+           c.is_computed AS IsComputed,
+           CASE WHEN ty.name IN ('timestamp','rowversion') THEN 1 ELSE 0 END AS IsRowVersion,
            CASE WHEN pkcols.column_id IS NOT NULL THEN 1 ELSE 0 END AS IsPrimaryKeyPart
     FROM sys.tables t
     JOIN sys.schemas s ON t.schema_id = s.schema_id
@@ -145,7 +147,9 @@ public sealed class SqlServerSchemaInspector(
                     r.IsNullable,
                     r.IsIdentity,
                     r.IsPrimaryKeyPart,
-                    r.MaxLength is null or 0 ? null : (int?)r.MaxLength
+                    r.MaxLength is null or 0 ? null : (int?)r.MaxLength,
+                    r.IsComputed,
+                    r.IsRowVersion
                 )
             )
            .ToList();
@@ -313,6 +317,8 @@ public sealed class SqlServerSchemaInspector(
         public int? MaxLength { get; set; }
         public bool IsNullable { get; set; }
         public bool IsIdentity { get; set; }
+        public bool IsComputed { get; set; }
+        public bool IsRowVersion { get; set; }
         public bool IsPrimaryKeyPart { get; set; }
     }
 

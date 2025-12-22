@@ -1,7 +1,6 @@
 using DotNetToolkit.Database.Abstractions;
 using FluentAssertions;
 using ReportSyncer.Core.Configuration;
-using System.Threading;
 using ReportSyncer.Core.Exceptions;
 using ReportSyncer.Core.Schema;
 
@@ -426,5 +425,71 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
         Func<Task> act = async () => await inspector.InspectAsync(reqBad, CancellationToken.None);
 
         await act.Should().ThrowAsync<SyncExecutionException>();
+    }
+
+    [SkippableFact]
+    public async Task InspectAsync_DetectsComputedColumn()
+    {
+        CheckSkip();
+
+        var factory   = fixture.CreateDbContextFactory();
+        var inspector = new SqlServerSchemaInspector(factory);
+
+        var connConfig = new ConnectionConfig(
+            "test", fixture.ConnectionString!, EnvironmentType.Dev, ConnectionType.Application
+        );
+
+        var tables = new[] { new TableIdentifier("rs_test", "Orders") };
+        var req = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snapshot = await inspector.InspectAsync(req, CancellationToken.None);
+
+        var orders = snapshot.Tables.Single(t => string.Equals(
+                t.Table.TableName, "Orders", StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        orders.Columns.Should()
+            .Contain(c => string.Equals(c.Name, "OrderNoUpper", StringComparison.OrdinalIgnoreCase)
+                         && c.IsComputed);
+    }
+
+    [SkippableFact]
+    public async Task InspectAsync_DetectsRowVersionColumn()
+    {
+        CheckSkip();
+
+        var factory   = fixture.CreateDbContextFactory();
+        var inspector = new SqlServerSchemaInspector(factory);
+
+        var connConfig = new ConnectionConfig(
+            "test", fixture.ConnectionString!, EnvironmentType.Dev, ConnectionType.Application
+        );
+
+        var tables = new[] { new TableIdentifier("rs_test", "Products") };
+        var req = new SchemaInspectionRequest
+        {
+            Connection = connConfig,
+            Tables = tables,
+            Role = SchemaRole.Target,
+            Level = SchemaInspectionLevel.Full
+        };
+
+        var snapshot = await inspector.InspectAsync(req, CancellationToken.None);
+
+        var products = snapshot.Tables.Single(t => string.Equals(
+                t.Table.TableName, "Products", StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        products.Columns.Should()
+            .Contain(c => string.Equals(c.Name, "RowVer", StringComparison.OrdinalIgnoreCase)
+                         && c.IsRowVersion);
     }
 }
