@@ -8,6 +8,7 @@
 		}
 	],
 	"settings": {
-		"powershell.cwd": "ReportSyncer"
+		"powershell.cwd": "ReportSyncer",
+		"dotnet.unitTests.runSettingsPath": "Tests/ReportSyncer.Core.Tests/.runsettings"
 	}
 }
