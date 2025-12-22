@@ -127,9 +127,9 @@ public class ConfigurationValidatorTests
         var goodConn = new ConnectionConfig("ExistingConn", "Server=.;Database=Good;Integrated Security=true;", EnvironmentType.Dev, ConnectionType.Application);
 
         var table = minimal.SyncJobs[0].Tables[0];
-        var job = new SyncJobConfig("JobA", null, goodConn.Name, goodConn.Name, new Dictionary<string, string>(), new[] { table });
+        var job = new SyncJobConfig("JobA", null, goodConn.Name, goodConn.Name, new Dictionary<string, string>(), [table]);
 
-        var cfg = new SyncConfiguration("1.0", run, safety, schema, new[] { badConn, goodConn }, new[] { job });
+        var cfg = new SyncConfiguration("1.0", run, safety, schema, [badConn, goodConn], [job]);
 
         var ex = Assert.Throws<ConfigurationException>(() => _validator.Validate(cfg));
 
@@ -148,9 +148,9 @@ public class ConfigurationValidatorTests
         var c2 = new ConnectionConfig("DupConn", "Server=.;Database=D2;Integrated Security=true;", EnvironmentType.Dev, ConnectionType.Reporting);
 
         var table = minimal.SyncJobs[0].Tables[0];
-        var job = new SyncJobConfig("JobB", null, c1.Name, c1.Name, new Dictionary<string, string>(), new[] { table });
+        var job = new SyncJobConfig("JobB", null, c1.Name, c1.Name, new Dictionary<string, string>(), [table]);
 
-        var cfg = new SyncConfiguration("1.0", run, safety, schema, new[] { c1, c2 }, new[] { job });
+        var cfg = new SyncConfiguration("1.0", run, safety, schema, [c1, c2], [job]);
 
         var ex = Assert.Throws<ConfigurationException>(() => _validator.Validate(cfg));
 
@@ -170,9 +170,9 @@ public class ConfigurationValidatorTests
         var badConn = ConfigurationTestData.CreateConnectionWithRaw("BadEnvConn", "Server=.;Database=BadEnv;Integrated Security=true;", badEnv, ConnectionType.Application);
 
         var table = minimal.SyncJobs[0].Tables[0];
-        var job = new SyncJobConfig("JobEnv", null, badConn.Name, badConn.Name, new Dictionary<string, string>(), new[] { table });
+        var job = new SyncJobConfig("JobEnv", null, badConn.Name, badConn.Name, new Dictionary<string, string>(), [table]);
 
-        var cfg = new SyncConfiguration("1.0", run, safety, schema, new[] { badConn }, new[] { job });
+        var cfg = new SyncConfiguration("1.0", run, safety, schema, [badConn], [job]);
 
         var ex = Assert.Throws<ConfigurationException>(() => _validator.Validate(cfg));
 
@@ -192,9 +192,9 @@ public class ConfigurationValidatorTests
         var badConn = ConfigurationTestData.CreateConnectionWithRaw("BadTypeConn", "Server=.;Database=BadType;Integrated Security=true;", EnvironmentType.Dev, badType);
 
         var table = minimal.SyncJobs[0].Tables[0];
-        var job = new SyncJobConfig("JobType", null, badConn.Name, badConn.Name, new Dictionary<string, string>(), new[] { table });
+        var job = new SyncJobConfig("JobType", null, badConn.Name, badConn.Name, new Dictionary<string, string>(), [table]);
 
-        var cfg = new SyncConfiguration("1.0", run, safety, schema, new[] { badConn }, new[] { job });
+        var cfg = new SyncConfiguration("1.0", run, safety, schema, [badConn], [job]);
 
         var ex = Assert.Throws<ConfigurationException>(() => _validator.Validate(cfg));
 
@@ -213,12 +213,130 @@ public class ConfigurationValidatorTests
         var badConn = ConfigurationTestData.CreateConnectionWithRaw("NoConnStr", "", EnvironmentType.Dev, ConnectionType.Application);
 
         var table = minimal.SyncJobs[0].Tables[0];
-        var job = new SyncJobConfig("JobConnStr", null, badConn.Name, badConn.Name, new Dictionary<string, string>(), new[] { table });
+        var job = new SyncJobConfig("JobConnStr", null, badConn.Name, badConn.Name, new Dictionary<string, string>(), [table]);
 
-        var cfg = new SyncConfiguration("1.0", run, safety, schema, new[] { badConn }, new[] { job });
+        var cfg = new SyncConfiguration("1.0", run, safety, schema, [badConn], [job]);
 
         var ex = Assert.Throws<ConfigurationException>(() => _validator.Validate(cfg));
 
         Assert.Contains(ex.Errors, e => e.Code == "CFG_CONNECTION_STRING_MISSING");
+    }
+
+    [Fact]
+    public void Validate_MappingRuleConflict_ReportsMappingRuleConflict()
+    {
+        var minimal = ConfigurationTestData.CreateMinimalValidConfig();
+        var run = minimal.Run;
+        var safety = minimal.Safety;
+        var schema = minimal.SchemaPolicy;
+
+        var origJob = minimal.SyncJobs[0];
+        var origTable = origJob.Tables[0];
+
+        var dict = new Dictionary<string, ColumnMappingRule>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["XCol"] = new ColumnMappingRule { FromSource = "SrcCol", Const = "CONST" }
+        };
+
+        var mapping = new ColumnMappingConfig(true, dict);
+
+        var newTable = new TableTaskConfig(
+            origTable.Source,
+            origTable.Target,
+            origTable.Enabled,
+            origTable.PreSyncTargetAction,
+            origTable.AllowAllDelete,
+            origTable.EnableIdentityInsert,
+            origTable.Filter,
+            mapping,
+            origTable.Keys,
+            origTable.SyncOptions
+        );
+
+        var job = new SyncJobConfig(origJob.Name, origJob.Description, origJob.SourceConnection, origJob.TargetConnection, new Dictionary<string,string>(origJob.Parameters), [newTable]);
+
+        var cfg = new SyncConfiguration(minimal.Version, run, safety, schema, minimal.Connections, [job]);
+
+        var ex = Assert.Throws<ConfigurationException>(() => _validator.Validate(cfg));
+        Assert.Contains(ex.Errors, e => e.Code == "CFG_MAPPING_RULE_CONFLICT");
+    }
+
+    [Fact]
+    public void Validate_MappingRuleEmptyFromSource_ReportsFromSourceEmpty()
+    {
+        var minimal = ConfigurationTestData.CreateMinimalValidConfig();
+        var run = minimal.Run;
+        var safety = minimal.Safety;
+        var schema = minimal.SchemaPolicy;
+
+        var origJob = minimal.SyncJobs[0];
+        var origTable = origJob.Tables[0];
+
+        var dict = new Dictionary<string, ColumnMappingRule>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["YCol"] = new ColumnMappingRule { FromSource = "" },
+            ["ZCol"] = new ColumnMappingRule { Const = "SomeValue" }
+        };
+
+        var mapping = new ColumnMappingConfig(true, dict);
+
+        var newTable = new TableTaskConfig(
+            origTable.Source,
+            origTable.Target,
+            origTable.Enabled,
+            origTable.PreSyncTargetAction,
+            origTable.AllowAllDelete,
+            origTable.EnableIdentityInsert,
+            origTable.Filter,
+            mapping,
+            origTable.Keys,
+            origTable.SyncOptions
+        );
+
+        var job = new SyncJobConfig(origJob.Name, origJob.Description, origJob.SourceConnection, origJob.TargetConnection, new Dictionary<string,string>(origJob.Parameters), [newTable]);
+
+        var cfg = new SyncConfiguration(minimal.Version, run, safety, schema, minimal.Connections, [job]);
+
+        var ex = Assert.Throws<ConfigurationException>(() => _validator.Validate(cfg));
+        Assert.Contains(ex.Errors, e => e.Code == "CFG_MAPPING_RULE_FROMSOURCE_EMPTY");
+    }
+
+    [Fact]
+    public void Validate_MappingRuleMissingJobParameter_ReportsJobParameterMissing()
+    {
+        var minimal = ConfigurationTestData.CreateMinimalValidConfig();
+        var run = minimal.Run;
+        var safety = minimal.Safety;
+        var schema = minimal.SchemaPolicy;
+
+        var origJob = minimal.SyncJobs[0];
+        var origTable = origJob.Tables[0];
+
+        var dict = new Dictionary<string, ColumnMappingRule>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ZCol"] = new ColumnMappingRule { FromParameter = "MissingParam" }
+        };
+
+        var mapping = new ColumnMappingConfig(true, dict);
+
+        var newTable = new TableTaskConfig(
+            origTable.Source,
+            origTable.Target,
+            origTable.Enabled,
+            origTable.PreSyncTargetAction,
+            origTable.AllowAllDelete,
+            origTable.EnableIdentityInsert,
+            origTable.Filter,
+            mapping,
+            origTable.Keys,
+            origTable.SyncOptions
+        );
+
+        var job = new SyncJobConfig(origJob.Name, origJob.Description, origJob.SourceConnection, origJob.TargetConnection, new Dictionary<string,string>(origJob.Parameters), [newTable]);
+
+        var cfg = new SyncConfiguration(minimal.Version, run, safety, schema, minimal.Connections, [job]);
+
+        var ex = Assert.Throws<ConfigurationException>(() => _validator.Validate(cfg));
+        Assert.Contains(ex.Errors, e => e.Code == "CFG_JOB_PARAMETER_MISSING");
     }
 }

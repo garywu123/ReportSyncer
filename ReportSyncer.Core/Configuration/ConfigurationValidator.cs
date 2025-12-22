@@ -253,15 +253,15 @@ internal sealed class ConfigurationValidator : IConfigurationValidator
         }
     }
 
-        /// <summary>
-        /// Validates delete-related settings for a table: threshold ranges and safety constraints.
-        /// </summary>
-        private static void ValidateTableDeleteSettings(
-            SyncConfiguration config,
-            SyncJobConfig job,
-            TableTaskConfig table,
-            string path,
-            List<ConfigurationError> errors)
+    /// <summary>
+    /// Validates delete-related settings for a table: threshold ranges and safety constraints.
+    /// </summary>
+    private static void ValidateTableDeleteSettings(
+        SyncConfiguration config,
+        SyncJobConfig job,
+        TableTaskConfig table,
+        string path,
+        List<ConfigurationError> errors)
     {
         // Validate pre-sync delete behavior
         if (table.PreSyncTargetAction)

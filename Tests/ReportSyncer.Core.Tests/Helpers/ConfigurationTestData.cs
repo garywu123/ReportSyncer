@@ -32,7 +32,7 @@ public static class ConfigurationTestData
             sourceConnection: "TestConnection_Dev",
             targetConnection: "TestConnection_Dev",
             parameters: new Dictionary<string, string>(),
-            tables: new[] { table }
+            tables: [table]
         );
 
         var runConfig = new RunConfig(
@@ -60,8 +60,8 @@ public static class ConfigurationTestData
             run: runConfig,
             safety: safetyConfig,
             schemaPolicy: schemaPolicyConfig,
-            connections: new[] { connection },
-            syncJobs: new[] { job }
+            connections: [connection],
+            syncJobs: [job]
         );
     }
 
@@ -124,7 +124,7 @@ public static class ConfigurationTestData
                     ["CustomerRef"] = new ColumnMappingRule { FromSource = "CustomerId" }
                 }
             ),
-            keys: new KeyConfig(new[] { "OrderId" }),
+            keys: new KeyConfig(["OrderId"]),
             syncOptions: new SyncOptionsConfig(batchSize: 250, useTvp: true)
         );
 
@@ -138,7 +138,7 @@ public static class ConfigurationTestData
                 ["CustomerId"] = "42",
                 ["StartDate"] = "2025-01-01"
             },
-            tables: new[] { minimal.SyncJobs[0].Tables[0], ordersTable }
+            tables: [minimal.SyncJobs[0].Tables[0], ordersTable]
         );
 
         var jobs = new List<SyncJobConfig>
