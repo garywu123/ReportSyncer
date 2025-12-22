@@ -12,15 +12,16 @@ namespace ReportSyncer.Core.Schema;
 /// <para>
 /// Uses a factory delegate to obtain an <see cref="IDbContext"/> for the provided
 /// <see cref="ConnectionConfig"/>. Supports two inspection levels via
-/// <see cref="SchemaInspectionLevel"/>: <c>ExistenceOnly</c> (verify existence) and
-/// <c>Full</c> (columns, PK and FK metadata).
+/// <see cref="SchemaInspectionLevel"/>:
 /// </para>
+/// <list type="bullet">
+/// <item><c>ExistenceOnly</c>: Loads columns and PK metadata (no FK loading). Suitable for source snapshots.</item>
+/// <item><c>Full</c>: Loads columns, PK, and FK metadata. Required for target snapshots needing dependency ordering.</item>
+/// </list>
 /// </summary>
 /// <remarks>
 /// The inspector returns a <see cref="SchemaSnapshot"/> where <see cref="SchemaSnapshot.Role"/>
-/// matches the caller-supplied request. When callers previously relied on the old
-/// convention (empty table list -> Source, non-empty -> Target) a compatibility
-/// forwarder is available during migration.
+/// matches the caller-supplied request.
 /// </remarks>
 public sealed class SqlServerSchemaInspector(
     Func<ConnectionConfig, IDbContext> dbContextFactory)
@@ -30,14 +31,6 @@ public sealed class SqlServerSchemaInspector(
         dbContextFactory ?? throw new ArgumentNullException(nameof(dbContextFactory));
 
     #region SqlTemplates
-
-    private static readonly string ExistsSql = """
-    SELECT s.name AS SchemaName,
-           t.name AS TableName
-    FROM sys.tables t
-    JOIN sys.schemas s ON t.schema_id = s.schema_id
-    WHERE s.name = @schema AND t.name = @table
-    """;
 
     private static readonly string ColumnsSql = """
     SELECT s.name AS SchemaName,
@@ -109,13 +102,12 @@ public sealed class SqlServerSchemaInspector(
 
             if (request.Level == SchemaInspectionLevel.ExistenceOnly)
             {
-                var tables = await InspectExistenceOnlyAsync(ctx, requested, ct).ConfigureAwait(false);
+                // ExistenceOnly: load columns for type compatibility checks, skip FK loading
+                var tables = await InspectWithoutForeignKeysAsync(ctx, requested, ct).ConfigureAwait(false);
                 return new SchemaSnapshot(tables, request.Role, request.Level);
             }
 
-            // Full inspection (existing logic): load columns (including PK), then FKs and attach.
-            var fullTableSchemas = new List<TableSchema>(requested.Count);
-
+            // Full inspection: load columns + FK metadata
             var tablesFull = await InspectFullAsync(ctx, requested, ct).ConfigureAwait(false);
             return new SchemaSnapshot(tablesFull, request.Role, SchemaInspectionLevel.Full);
         }
@@ -178,28 +170,26 @@ public sealed class SqlServerSchemaInspector(
     }
 
     /// <summary>
-    /// Inspect the requested tables in <c>ExistenceOnly</c> mode: verify that each
-    /// table exists. Does not populate columns, PKs or FKs.
+    /// Inspect the requested tables without loading foreign key metadata.
+    /// This mode loads columns and PK information for type compatibility checks
+    /// but skips FK loading (used for Source snapshots where FKs aren't needed).
     /// </summary>
     /// <param name="ctx">Database context.</param>
-    /// <param name="requested">List of table identifiers to verify.</param>
+    /// <param name="requested">List of table identifiers to inspect.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>Minimal <see cref="TableSchema"/> instances (no columns or FKs) for existing tables.</returns>
-    private async Task<List<TableSchema>> InspectExistenceOnlyAsync(IDbContext ctx, List<TableIdentifier> requested, CancellationToken ct)
+    /// <returns><see cref="TableSchema"/> instances with columns but no FKs.</returns>
+    private async Task<List<TableSchema>> InspectWithoutForeignKeysAsync(IDbContext ctx, List<TableIdentifier> requested, CancellationToken ct)
     {
         var tableSchemas = new List<TableSchema>(requested.Count);
 
         foreach (var t in requested)
         {
-            var cmd = ctx.CreateCommand(ExistsSql, CommandType.Text);
-            cmd.AddParameter("@schema", t.SchemaName, DbType.String);
-            cmd.AddParameter("@table", t.TableName, DbType.String);
+            var cols = await LoadColumnsAsync(ctx, t, ct).ConfigureAwait(false);
+            if (cols == null || cols.Count == 0)
+                throw new SchemaMismatchException($"Table not found or has no columns: {t}");
 
-            var rows = await ctx.ExecuteQueryAsync<ColumnRow>(cmd, ct).ConfigureAwait(false);
-            if (rows == null || rows.Count == 0)
-                throw new SchemaMismatchException($"Table not found: {t}");
-
-            tableSchemas.Add(new TableSchema(t, Array.Empty<ColumnSchema>(), Array.Empty<string>(), Array.Empty<ForeignKeySchema>()));
+            var pkCols = cols.Where(c => c.IsPrimaryKeyPart).Select(c => c.Name).ToList();
+            tableSchemas.Add(new TableSchema(t, cols, pkCols, Array.Empty<ForeignKeySchema>()));
         }
 
         return tableSchemas;

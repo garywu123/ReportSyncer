@@ -115,7 +115,7 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
     }
 
     [SkippableFact]
-    public async Task InspectAsync_ExistenceOnly_WithExistingTables_ReturnsMinimalSchemas()
+    public async Task InspectAsync_ExistenceOnly_WithExistingTables_ReturnsColumnsButNoFKs()
     {
         CheckSkip();
         var factory = fixture.CreateDbContextFactory();
@@ -130,7 +130,7 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
         {
             Connection = connConfig,
             Tables = tables,
-            Role = SchemaRole.Target,
+            Role = SchemaRole.Source,
             Level = SchemaInspectionLevel.ExistenceOnly
         };
 
@@ -139,9 +139,9 @@ public class SqlServerSchemaInspectorIntegrationTests(SchemaIntegrationDatabaseF
         snapshot.Level.Should().Be(SchemaInspectionLevel.ExistenceOnly);
         snapshot.Tables.Should().NotBeEmpty();
         var ts = snapshot.Tables.Single();
-        ts.Columns.Should().BeEmpty();
-        ts.PrimaryKeyColumns.Should().BeEmpty();
-        ts.ForeignKeys.Should().BeEmpty();
+        ts.Columns.Should().NotBeEmpty(); // Now expects columns in ExistenceOnly mode
+        ts.PrimaryKeyColumns.Should().NotBeEmpty(); // PK columns should also be populated
+        ts.ForeignKeys.Should().BeEmpty(); // But no FKs in ExistenceOnly mode
     }
 
     [SkippableFact]
