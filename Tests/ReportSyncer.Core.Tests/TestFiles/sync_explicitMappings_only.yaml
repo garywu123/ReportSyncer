@@ -34,10 +34,13 @@ syncJobs:
         enabled: true
         columnMapping:
           automapByName: false
-          explicitMappings:
-            ProductId: "ProductKey"
-            ProductName: "Name"
-            Price: "UnitPrice"
+          mappings:
+            ProductId:
+              fromSource: "ProductKey"
+            ProductName:
+              fromSource: "Name"
+            Price:
+              fromSource: "UnitPrice"
         keys:
           businessKey: ["ProductId"]
       - source: "dbo.Categories"
@@ -45,8 +48,10 @@ syncJobs:
         enabled: true
         columnMapping:
           automapByName: true
-          explicitMappings:
-            CategoryId: "CatId"
-            CategoryName: "CatName"
+          mappings:
+            CategoryId:
+              fromSource: "CatId"
+            CategoryName:
+              fromSource: "CatName"
         keys:
           businessKey: ["CategoryId"]

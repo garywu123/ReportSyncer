@@ -6,6 +6,7 @@
 // Description: Configuration for column mapping between source and target tables.
 // ============================================================================
 
+using System;
 using System.Collections.Generic;
 using JetBrains.Annotations;
 
@@ -28,31 +29,35 @@ namespace ReportSyncer.Core.Configuration
         public bool AutomapByName { get; }
 
         /// <summary>
-        /// Explicit source→target column name mappings. Overrides automatic name-based mapping.
+        /// Unified mapping rules for target columns. Key is the target column name (case-insensitive).
+        /// Each entry describes the source or constant/parameter that should populate the target column.
         /// Null when none provided.
         /// </summary>
-        public IReadOnlyDictionary<string, string>? ExplicitMappings { get; }
-
-        /// <summary>
-        /// Additional columns to include in target inserts with constant or parameter values
-        /// (supports placeholders like "{CustomerId}"). Null when none provided.
-        /// </summary>
-        public IReadOnlyList<AddedColumnMappingConfig>? AddedColumns { get; }
+        public IReadOnlyDictionary<string, ColumnMappingRule>? Mappings { get; }
 
         /// <summary>
         /// Create a new column mapping configuration.
         /// </summary>
         /// <param name="automapByName">If true, enable automatic name-based mapping (default true).</param>
-        /// <param name="explicitMappings">Optional explicit source→target mappings.</param>
-        /// <param name="addedColumns">Optional added columns for target inserts.</param>
+        /// <param name="mappings">Optional unified column mapping rules, keyed by target column name.</param>
         public ColumnMappingConfig(
             bool automapByName = true,
-            IDictionary<string, string>? explicitMappings = null,
-            IEnumerable<AddedColumnMappingConfig> addedColumns = null)
+            IDictionary<string, ColumnMappingRule>? mappings = null)
         {
             AutomapByName = automapByName;
-            ExplicitMappings = explicitMappings != null ? new Dictionary<string, string>(explicitMappings) : null;
-            AddedColumns = addedColumns?.ToArray();
+            Mappings = mappings != null ? new Dictionary<string, ColumnMappingRule>(mappings, StringComparer.OrdinalIgnoreCase) : null;
         }
+    }
+
+    /// <summary>
+    /// A rule describing how to populate a specific target column.
+    /// Only one of FromSource, Const, FromParameter or Ignore should be set.
+    /// </summary>
+    public sealed class ColumnMappingRule
+    {
+        public string? FromSource { get; init; }
+        public string? Const { get; init; }
+        public string? FromParameter { get; init; }
+        public bool Ignore { get; init; }
     }
 }

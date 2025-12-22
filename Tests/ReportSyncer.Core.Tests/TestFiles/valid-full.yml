@@ -30,6 +30,7 @@ syncJobs:
     parameters:
       CustomerId: "42"
       StartDate: "2025-01-01"
+      CurrentTimestamp: "{{utcNow}}"
     tables:
       - source: "dbo.Orders"
         target: "dbo.Orders_Tgt"
@@ -43,12 +44,15 @@ syncJobs:
           endDate: "2025-12-31"
         columnMapping:
           automapByName: true
-          explicitMappings:
-            OrderId: "OrderId"
-            CustomerRef: "CustomerId"
-          addedColumns:
-            - columnName: "SourceSystem"
-              value: "ERP"
+          mappings:
+            OrderId:
+              fromSource: "OrderId"
+            CustomerRef:
+              fromSource: "CustomerId"
+            SourceSystem:
+              const: "ERP"
+            SyncTimestamp:
+              const: "{{CurrentTimestamp}}"
         keys:
           businessKey: ["OrderId"]
         syncOptions:

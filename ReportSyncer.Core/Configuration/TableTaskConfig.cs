@@ -42,43 +42,6 @@ namespace ReportSyncer.Core.Configuration
     /// are explicitly inserted from source values rather than auto-generated on the target.
     /// </para>
     /// </remarks>
-    /// <example>
-    /// <![CDATA[
-    /// // Dimension table: full wipe and reload (requires AllowAllDelete)
-    /// var dimensionSync = new TableTaskConfig(
-    ///     source: "Customers",
-    ///     target: "Customers",
-    ///     enabled: true,
-    ///     preSyncTargetAction: true,
-    ///     allowAllDelete: true,  // Required for full table delete
-    ///     enableIdentityInsert: true,
-    ///     filter: null,  // No filter = full table
-    ///     columnMapping: null,
-    ///     keys: null,
-    ///     syncOptions: null
-    /// );
-    /// 
-    /// // Historical data: filtered sync (no AllowAllDelete needed)
-    /// var historicalSync = new TableTaskConfig(
-    ///     source: "Orders",
-    ///     target: "Orders",
-    ///     enabled: true,
-    ///     preSyncTargetAction: true,
-    ///     allowAllDelete: false,  // Safe because filter is specified
-    ///     enableIdentityInsert: false,
-    ///     filter: new FilterConfig(
-    ///         dateColumn: "OrderDate",
-    ///         startDate: "{StartDate}",
-    ///         endDate: "{EndDate}",
-    ///         keyColumn: null,
-    ///         value: null
-    ///     ),
-    ///     columnMapping: null,
-    ///     keys: null,
-    ///     syncOptions: null
-    /// );
-    /// ]]>
-    /// </example>
     public class TableTaskConfig
     {
         /// <summary>

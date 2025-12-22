@@ -253,15 +253,15 @@ internal sealed class ConfigurationValidator : IConfigurationValidator
         }
     }
 
-    /// <summary>
-    /// Validates delete-related settings for a table: threshold ranges and safety constraints.
-    /// </summary>
-    private static void ValidateTableDeleteSettings(
-        SyncConfiguration config,
-        SyncJobConfig job,
-        TableTaskConfig table,
-        string path,
-        List<ConfigurationError> errors)
+        /// <summary>
+        /// Validates delete-related settings for a table: threshold ranges and safety constraints.
+        /// </summary>
+        private static void ValidateTableDeleteSettings(
+            SyncConfiguration config,
+            SyncJobConfig job,
+            TableTaskConfig table,
+            string path,
+            List<ConfigurationError> errors)
     {
         // Validate pre-sync delete behavior
         if (table.PreSyncTargetAction)
@@ -292,7 +292,7 @@ internal sealed class ConfigurationValidator : IConfigurationValidator
         // Validate column mapping if present
         if (table.ColumnMapping != null)
         {
-            ValidateColumnMapping(table.ColumnMapping, path, errors);
+            ValidateColumnMapping(table.ColumnMapping, path, job.Parameters as IReadOnlyDictionary<string, string>, errors);
         }
 
         // Validate keys/business key configuration if present
@@ -324,10 +324,75 @@ internal sealed class ConfigurationValidator : IConfigurationValidator
     /// <summary>
     /// Validates column mapping configuration.
     /// </summary>
-    private static void ValidateColumnMapping(ColumnMappingConfig columnMapping, string tablePath, List<ConfigurationError> errors)
+    private static void ValidateColumnMapping(ColumnMappingConfig columnMapping, string tablePath, IReadOnlyDictionary<string, string>? jobParameters, List<ConfigurationError> errors)
     {
-        // Column mapping validation can be extended based on specific requirements
-        // Future: validate source/target column references, mapping consistency, etc.
+        if (columnMapping == null) return;
+
+        var mappings = columnMapping.Mappings;
+        if (mappings == null || mappings.Count == 0) return;
+
+        foreach (var kv in mappings)
+        {
+            var targetCol = kv.Key;
+            var rule = kv.Value;
+            if (rule == null) continue;
+
+            var path = $"{tablePath}.columnMapping.mappings.{targetCol}";
+
+            var setCount = 0;
+            if (!string.IsNullOrWhiteSpace(rule.FromSource)) setCount++;
+            if (!string.IsNullOrWhiteSpace(rule.Const)) setCount++;
+            if (!string.IsNullOrWhiteSpace(rule.FromParameter)) setCount++;
+            if (rule.Ignore) setCount++;
+
+            if (setCount > 1)
+            {
+                errors.Add(ConfigurationErrors.MappingRuleConflict(path, targetCol));
+                continue;
+            }
+
+            if (rule.FromSource != null && string.IsNullOrWhiteSpace(rule.FromSource))
+            {
+                errors.Add(ConfigurationErrors.MappingRuleFromSourceEmpty(path, targetCol));
+            }
+
+            if (rule.FromParameter != null && string.IsNullOrWhiteSpace(rule.FromParameter))
+            {
+                errors.Add(ConfigurationErrors.MappingRuleFromParameterEmpty(path, targetCol));
+            }
+
+            if (rule.Const == null && rule.FromSource == null && rule.FromParameter == null && !rule.Ignore)
+            {
+                // Rule object exists but no meaningful value provided; report const-null if const explicitly present
+                if (rule.Const == null)
+                {
+                    errors.Add(ConfigurationErrors.MappingRuleConstNull(path, targetCol));
+                }
+            }
+
+            // Validate FromParameter references exist in job parameters (case-insensitive)
+            if (!string.IsNullOrWhiteSpace(rule.FromParameter))
+            {
+                var paramName = rule.FromParameter!;
+                var found = false;
+                if (jobParameters != null)
+                {
+                    foreach (var k in jobParameters.Keys)
+                    {
+                        if (string.Equals(k, paramName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!found)
+                {
+                    errors.Add(ConfigurationErrors.JobParameterMissing(path, paramName));
+                }
+            }
+        }
     }
 
     /// <summary>

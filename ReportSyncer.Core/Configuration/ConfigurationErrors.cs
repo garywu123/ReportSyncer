@@ -289,4 +289,53 @@ internal static class ConfigurationErrors
             "CFG_CONFIRM_DELETE_PCT_INVALID",
             $"Confirm large delete percentage '{percentage}' is invalid. Percentage must be between 0.0 and 1.0 (inclusive).",
             "safety.confirmLargeDeletePct");
+
+    // ============================================================================
+    // Column Mapping Validation Errors
+    // ============================================================================
+
+    /// <summary>
+    /// Error: Mapping rule contains multiple sources (conflict).
+    /// </summary>
+    public static ConfigurationError MappingRuleConflict(string path, string targetColumn) =>
+        new(
+            "CFG_MAPPING_RULE_CONFLICT",
+            $"Mapping rule for target column '{targetColumn}' contains conflicting definitions. Only one of 'fromSource', 'const', 'fromParameter' or 'ignore' may be set.",
+            path);
+
+    /// <summary>
+    /// Error: Mapping rule has empty 'fromSource' value.
+    /// </summary>
+    public static ConfigurationError MappingRuleFromSourceEmpty(string path, string targetColumn) =>
+        new(
+            "CFG_MAPPING_RULE_FROMSOURCE_EMPTY",
+            $"Mapping rule for target column '{targetColumn}' has an empty 'fromSource' value.",
+            path);
+
+    /// <summary>
+    /// Error: Mapping rule has empty 'fromParameter' value.
+    /// </summary>
+    public static ConfigurationError MappingRuleFromParameterEmpty(string path, string targetColumn) =>
+        new(
+            "CFG_MAPPING_RULE_FROMPARAM_EMPTY",
+            $"Mapping rule for target column '{targetColumn}' has an empty 'fromParameter' value.",
+            path);
+
+    /// <summary>
+    /// Error: Mapping rule 'const' was provided but is null.
+    /// </summary>
+    public static ConfigurationError MappingRuleConstNull(string path, string targetColumn) =>
+        new(
+            "CFG_MAPPING_RULE_CONST_NULL",
+            $"Mapping rule for target column '{targetColumn}' specifies 'const' but the value is null.",
+            path);
+
+    /// <summary>
+    /// Error: Job parameter referenced by a mapping rule is missing from the job parameters.
+    /// </summary>
+    public static ConfigurationError JobParameterMissing(string path, string parameterName) =>
+        new(
+            "CFG_JOB_PARAMETER_MISSING",
+            $"Job parameter '{parameterName}' referenced by a mapping rule does not exist in the job parameters.",
+            path);
 }

@@ -309,20 +309,31 @@ namespace ReportSyncer.Core.Configuration
                                     ColumnMappingConfig? mapping = null;
                                     if (t.ColumnMapping != null)
                                     {
-                                        var explicitMappings = t.ColumnMapping.ExplicitMappings != null
-                                            ? new Dictionary<string, string>(t.ColumnMapping.ExplicitMappings)
-                                            : new Dictionary<string, string>();
+                                        var mappingsDict = new Dictionary<string, ColumnMappingRule>(StringComparer.OrdinalIgnoreCase);
+                                        if (t.ColumnMapping.Mappings != null)
+                                        {
+                                            foreach (var kv in t.ColumnMapping.Mappings)
+                                            {
+                                                var key = kv.Key;
+                                                var dto = kv.Value;
+                                                if (dto == null)
+                                                    continue;
 
-                                        var addedCols = t.ColumnMapping.AddedColumns
-                                            ?.Where(a => a != null && a.ColumnName != null && a.Value != null)
-                                            .Select(a => new AddedColumnMappingConfig(a!.ColumnName!, a!.Value!))
-                                            .ToArray()
-                                            ?? Array.Empty<AddedColumnMappingConfig>();
+                                                var rule = new ColumnMappingRule
+                                                {
+                                                    FromSource = dto.FromSource,
+                                                    Const = dto.Const,
+                                                    FromParameter = dto.FromParameter,
+                                                    Ignore = dto.Ignore
+                                                };
+
+                                                mappingsDict[key] = rule;
+                                            }
+                                        }
 
                                         mapping = new ColumnMappingConfig(
                                             t.ColumnMapping.AutomapByName,
-                                            explicitMappings,
-                                            addedCols
+                                            mappingsDict.Count > 0 ? mappingsDict : null
                                         );
                                     }
 
@@ -487,16 +498,16 @@ namespace ReportSyncer.Core.Configuration
 
         private class ColumnMappingDto
         {
-            public bool                        AutomapByName    { get; set; } = true;
-            public Dictionary<string, string>? ExplicitMappings { get; set; }
-            // ReSharper disable once CollectionNeverUpdated.Local
-            public List<AddedColumnDto>?       AddedColumns     { get; set; }
+            public bool                                           AutomapByName { get; set; } = true;
+            public Dictionary<string, ColumnMappingRuleDto>?     Mappings       { get; set; }
         }
 
-        private class AddedColumnDto
+        private class ColumnMappingRuleDto
         {
-            public string? ColumnName { get; set; }
-            public string? Value      { get; set; }
+            public string? FromSource    { get; set; }
+            public string? Const         { get; set; }
+            public string? FromParameter { get; set; }
+            public bool    Ignore        { get; set; }
         }
 
         private class KeyDto

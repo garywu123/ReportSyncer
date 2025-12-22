@@ -118,10 +118,10 @@ public static class ConfigurationTestData
             ),
             columnMapping: new ColumnMappingConfig(
                 automapByName: true,
-                explicitMappings: new Dictionary<string, string>
+                mappings: new Dictionary<string, ColumnMappingRule>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["OrderId"] = "OrderId",
-                    ["CustomerRef"] = "CustomerId"
+                    ["OrderId"] = new ColumnMappingRule { FromSource = "OrderId" },
+                    ["CustomerRef"] = new ColumnMappingRule { FromSource = "CustomerId" }
                 }
             ),
             keys: new KeyConfig(new[] { "OrderId" }),

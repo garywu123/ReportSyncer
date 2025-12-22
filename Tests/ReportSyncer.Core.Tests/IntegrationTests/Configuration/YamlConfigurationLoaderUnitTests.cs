@@ -61,6 +61,26 @@ public class YamlConfigurationLoaderUnitTests
         Assert.True(orders.EnableIdentityInsert);
         Assert.NotNull(orders.ColumnMapping);
         Assert.True(orders.ColumnMapping.AutomapByName);
+
+        // Validate unified mappings (fromSource, const, fromParameter, ignore)
+        Assert.NotNull(orders.ColumnMapping.Mappings);
+        Assert.Equal("OrderId", orders.ColumnMapping.Mappings["OrderId"].FromSource);
+        Assert.Equal("CustomerId", orders.ColumnMapping.Mappings["CustomerRef"].FromSource);
+
+        // const value
+        Assert.Equal("ERP", orders.ColumnMapping.Mappings["SourceSystem"].Const);
+
+        // parameter mapping: ensure rule references parameter and job contains the parameter (don't assert exact datetime)
+        Assert.Equal("CurrentTimestamp", orders.ColumnMapping.Mappings["SyncTimestamp"].FromParameter);
+        Assert.True(job.Parameters.ContainsKey("CurrentTimestamp"));
+        Assert.False(string.IsNullOrWhiteSpace(job.Parameters["CurrentTimestamp"]));
+
+        // additional const and parameter-backed mapping
+        Assert.Equal("FULLSYNC", orders.ColumnMapping.Mappings["ExportTag"].Const);
+        Assert.Equal("CustomerId", orders.ColumnMapping.Mappings["ParamValueCol"].FromParameter);
+
+        // ignore rule
+        Assert.True(orders.ColumnMapping.Mappings["IgnoredCol"].Ignore);
     }
 
     [Fact]
@@ -202,13 +222,13 @@ public class YamlConfigurationLoaderUnitTests
         Assert.Equal("dbo.Products_Target", productsTable.Target);
         Assert.NotNull(productsTable.ColumnMapping);
         Assert.False(productsTable.ColumnMapping.AutomapByName);
-        Assert.NotNull(productsTable.ColumnMapping.ExplicitMappings);
-        Assert.Equal(3, productsTable.ColumnMapping.ExplicitMappings.Count);
-        Assert.Equal("ProductKey", productsTable.ColumnMapping.ExplicitMappings["ProductId"]);
-        Assert.Equal("Name", productsTable.ColumnMapping.ExplicitMappings["ProductName"]);
-        Assert.Equal("UnitPrice", productsTable.ColumnMapping.ExplicitMappings["Price"]);
-        Assert.NotNull(productsTable.ColumnMapping.AddedColumns);
-        Assert.Empty(productsTable.ColumnMapping.AddedColumns);
+        Assert.NotNull(productsTable.ColumnMapping.Mappings);
+        Assert.Equal(3, productsTable.ColumnMapping.Mappings.Count);
+        Assert.Equal("ProductKey", productsTable.ColumnMapping.Mappings["ProductId"].FromSource);
+        Assert.Equal("Name", productsTable.ColumnMapping.Mappings["ProductName"].FromSource);
+        Assert.Equal("UnitPrice", productsTable.ColumnMapping.Mappings["Price"].FromSource);
+        // Ensure there are no added/constant mappings for this table
+        Assert.DoesNotContain(productsTable.ColumnMapping.Mappings, kv => !string.IsNullOrWhiteSpace(kv.Value.Const) || !string.IsNullOrWhiteSpace(kv.Value.FromParameter));
 
         // Verify second table: automapByName=true + explicitMappings (no addedColumns)
         var categoriesTable = job.Tables[1];
@@ -216,11 +236,10 @@ public class YamlConfigurationLoaderUnitTests
         Assert.Equal("dbo.Categories_Target", categoriesTable.Target);
         Assert.NotNull(categoriesTable.ColumnMapping);
         Assert.True(categoriesTable.ColumnMapping.AutomapByName);
-        Assert.NotNull(categoriesTable.ColumnMapping.ExplicitMappings);
-        Assert.Equal(2, categoriesTable.ColumnMapping.ExplicitMappings.Count);
-        Assert.Equal("CatId", categoriesTable.ColumnMapping.ExplicitMappings["CategoryId"]);
-        Assert.Equal("CatName", categoriesTable.ColumnMapping.ExplicitMappings["CategoryName"]);
-        Assert.NotNull(categoriesTable.ColumnMapping.AddedColumns);
-        Assert.Empty(categoriesTable.ColumnMapping.AddedColumns);
+        Assert.NotNull(categoriesTable.ColumnMapping.Mappings);
+        Assert.Equal(2, categoriesTable.ColumnMapping.Mappings.Count);
+        Assert.Equal("CatId", categoriesTable.ColumnMapping.Mappings["CategoryId"].FromSource);
+        Assert.Equal("CatName", categoriesTable.ColumnMapping.Mappings["CategoryName"].FromSource);
+        Assert.DoesNotContain(categoriesTable.ColumnMapping.Mappings, kv => !string.IsNullOrWhiteSpace(kv.Value.Const) || !string.IsNullOrWhiteSpace(kv.Value.FromParameter));
     }
 }
