@@ -50,7 +50,7 @@ public class ConfigurationValidatorTests
     [Fact]
     public void Validate_WithNullConfiguration_ThrowsArgumentNullException()
     {
-        Assert.Throws<System.ArgumentNullException>(() => _validator.Validate(null!));
+        Assert.Throws<ArgumentNullException>(() => _validator.Validate(null!));
     }
 
     [Fact]

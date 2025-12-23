@@ -3,7 +3,6 @@ using DotNetToolkit.Database.Configuration;
 using DotNetToolkit.Database.Internal;
 using DotNetToolkit.Database.Services;
 using Microsoft.Data.SqlClient;
-using System.IO;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
