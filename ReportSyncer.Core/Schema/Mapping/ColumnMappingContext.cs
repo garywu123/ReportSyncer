@@ -36,8 +36,10 @@ internal sealed record ColumnMappingContext(
     /// <summary>
     /// Attempts to resolve a source column by name using case-insensitive matching.
     /// </summary>
-    public bool TryGetSourceColumn(string columnName, out ColumnSchema column)
+    public bool TryGetSourceColumn(string columnName, out ColumnSchema? column)
     {
-        return SourceColumns.TryGetValue(columnName, out column);
+        var found = SourceColumns.TryGetValue(columnName, out var tmp);
+        column = tmp;
+        return found;
     }
 }
