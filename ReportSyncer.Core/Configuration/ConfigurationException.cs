@@ -6,10 +6,6 @@
 // Description: Exception type used for configuration loading and validation errors.
 // ============================================================================
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

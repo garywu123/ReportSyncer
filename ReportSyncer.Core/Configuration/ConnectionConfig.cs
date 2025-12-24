@@ -6,8 +6,6 @@
 // Description: Configuration for a database connection with environment and type metadata.
 // ============================================================================
 
-using System;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

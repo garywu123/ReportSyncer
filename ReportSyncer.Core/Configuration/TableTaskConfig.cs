@@ -6,8 +6,6 @@
 // Description: Configuration for a single table synchronization task within a job.
 // ============================================================================
 
-using System;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

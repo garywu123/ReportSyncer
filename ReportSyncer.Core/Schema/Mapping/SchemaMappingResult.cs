@@ -6,9 +6,6 @@
 // Description: Top-level result returned by the schema mapper for a job.
 // ============================================================================
 
-using System.Collections.Generic;
-using ReportSyncer.Core.Schema;
-
 namespace ReportSyncer.Core.Schema.Mapping;
 
 /// <summary>

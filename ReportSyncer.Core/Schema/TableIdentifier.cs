@@ -1,5 +1,3 @@
-using System;
-
 namespace ReportSyncer.Core.Schema
 {
     /// <summary>

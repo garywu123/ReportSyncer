@@ -6,8 +6,6 @@
 // Description: Global runtime configuration settings for synchronization execution.
 // ============================================================================
 
-using System;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

@@ -8,7 +8,6 @@
 
 using DotNetToolkit.General;
 using ReportSyncer.Core.Configuration;
-using ReportSyncer.Core.Schema;
 
 namespace ReportSyncer.Core.Schema.Mapping;
 

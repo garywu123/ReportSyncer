@@ -6,10 +6,6 @@
 // Description: Configuration for column mapping between source and target tables.
 // ============================================================================
 
-using System;
-using System.Collections.Generic;
-using JetBrains.Annotations;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

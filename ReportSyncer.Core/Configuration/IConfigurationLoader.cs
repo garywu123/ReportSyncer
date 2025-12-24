@@ -6,9 +6,6 @@
 // Description: Abstraction for loading sync configuration from a source.
 // ============================================================================
 
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

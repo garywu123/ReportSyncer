@@ -6,8 +6,6 @@
 // Description: Configuration for injected/added columns in target inserts.
 // ============================================================================
 
-using System;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

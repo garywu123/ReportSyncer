@@ -6,10 +6,6 @@
 // Description: Configuration for business key definitions used in deduplication.
 // ============================================================================
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

@@ -6,10 +6,6 @@
 // Description: Configuration for a synchronization job containing multiple table tasks.
 // ============================================================================
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

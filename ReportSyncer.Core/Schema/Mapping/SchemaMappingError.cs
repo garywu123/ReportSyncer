@@ -6,8 +6,6 @@
 // Description: Structured error details returned by the schema mapper.
 // ============================================================================
 
-using ReportSyncer.Core.Schema;
-
 namespace ReportSyncer.Core.Schema.Mapping;
 
 /// <summary>

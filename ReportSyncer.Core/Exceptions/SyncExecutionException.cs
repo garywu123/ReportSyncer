@@ -1,5 +1,3 @@
-using System;
-
 namespace ReportSyncer.Core.Exceptions
 {
     public class SyncExecutionException : Exception

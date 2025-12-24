@@ -6,9 +6,6 @@
 // Description: Aggregated mapping for a source→target table pair.
 // ============================================================================
 
-using System.Collections.Generic;
-using ReportSyncer.Core.Schema;
-
 namespace ReportSyncer.Core.Schema.Mapping;
 
 /// <summary>

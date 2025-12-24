@@ -6,8 +6,6 @@
 // Description: Global safety configuration to prevent dangerous sync operations.
 // ============================================================================
 
-using System;
-
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using ReportSyncer.Core.Configuration;
 
 namespace ReportSyncer.Core.Schema;

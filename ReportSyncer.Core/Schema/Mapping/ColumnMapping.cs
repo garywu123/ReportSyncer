@@ -6,8 +6,6 @@
 // Description: Describes how a single target column is mapped from the source snapshot.
 // ============================================================================
 
-using ReportSyncer.Core.Schema;
-
 namespace ReportSyncer.Core.Schema.Mapping;
 
 /// <summary>
