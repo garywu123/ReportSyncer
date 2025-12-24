@@ -45,7 +45,6 @@ namespace ReportSyncer.Core.Configuration
         private static readonly IDeserializer Deserializer =
             new DeserializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
-                .IgnoreUnmatchedProperties()
                 .Build();
 
         private readonly ILogService _log;
@@ -104,8 +103,13 @@ namespace ReportSyncer.Core.Configuration
         /// <param name="path">Absolute path to the configuration file.</param>
         /// <param name="ct">Cancellation token for the operation.</param>
         /// <returns>The file contents as a string.</returns>
-        internal static Task<string> ReadFileAsync(string path, CancellationToken ct) =>
-            File.ReadAllTextAsync(path, ct);
+        internal static Task<string> ReadFileAsync(string path, CancellationToken ct)
+        {
+            if (!File.Exists(path))
+                throw new ConfigurationException($"Configuration file not found: {path}");
+
+            return File.ReadAllTextAsync(path, ct);
+        }
 
         /// <summary>
         /// Parses the YAML document and returns the root mapping node.
