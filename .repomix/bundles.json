@@ -32,6 +32,19 @@
         "Tests/ReportSyncer.Core.Tests/UnitTests/Schema/Mapping/SchemaMapperTests.cs"
       ],
       "configPath": ".repomix/config/ConfigWithMapRepo-repomix.config.json"
+    },
+    "Full-Core-857": {
+      "name": "Full-Core",
+      "created": "2025-12-24T06:56:47.663Z",
+      "lastUsed": "2025-12-24T07:00:07.748Z",
+      "tags": [],
+      "files": [
+        "ReportSyncer.Core/Exceptions",
+        "ReportSyncer.Core/Schema",
+        "ReportSyncer.Core/Configuration",
+        "ReportSyncer.Core/ReportSyncer.Core.csproj"
+      ],
+      "configPath": ".repomix/config/Full-Core-repomix.config.json"
     }
   }
 }
