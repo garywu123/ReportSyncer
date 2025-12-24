@@ -797,36 +797,28 @@ This matches your “assign different AI coders per section” model and keeps f
 **主要产物**
 
 * 新的 mapping 领域对象（示例）：
-
-  * `ColumnMapping`：`SourceColumn?`, `TargetColumn`, `MappingKind`（OneToOne / Constant / ContextColumn / Ignored）
+  * `ColumnMapping`：`SourceColumn?`, `TargetColumn`, `MappingKind`（`OneToOne` / `Constant` / `ContextColumn` / `Ignored`）
   * `TableMapping`：`SourceTable`, `TargetTable`, `ColumnMappings`, `PrimaryKeyMapping`, 兼容性 flags 等
   * `SchemaMappingResult`：`Success` / `Failure` + 错误列表
 * 类 `SchemaMapper`：
-
   * 输入：
-
     * 源 `SchemaSnapshot`、目标 `SchemaSnapshot`
     * `SyncConfiguration` 或至少当前 `SyncJob` + `TableTask` 列表
   * 行为：
-
     * 对每个 `TableTask` 找到对应的源/目标 `TableSchema`。
     * 自动做「按列名匹配」的一对一映射，忽略大小写策略与 Arch 保持一致。
     * 应用 PRD 里的 Context Column 规则：
-
-      * `Source.Type == Application && Target.Type == Reporting` 时，自动在目标侧补上 Context Column：
-
-        * 从 job parameter 中取值，生成 `ColumnMapping`（MappingKind = ContextColumn）。
+      * `Source.Type == Application && Target.Type == Reporting` 时，自动在目标侧补上 `Context Column`：
+        * 从 job parameter 中取值，生成 `ColumnMapping`（`MappingKind = ContextColumn`）。
         * 如果目标已经有同名列且来源有值，触发“歧义保护”错误。
-    * 做基础类型兼容性检查（按类型家族，nvarchar ↔ varchar / int ↔ bigint 等）。
+    * 做基础类型兼容性检查（按类型家族，`nvarchar` ↔ `varchar` / `int` ↔ `bigint` 等）。可以尝试将这个类型检查作为工具存放到 `DotNetToolkit.Database` 中
     * 对缺失必需列、类型不兼容，生成结构化错误（含表名、列名、源/目标类型）。
 * 与安全相关：
-
   * 不在这里做“是否允许同步该表”的安全判断，只做「结构是否能安全映射」。
 
 **测试要点**
 
 * 纯内存测试，不依赖真实 DB：
-
   * 简单 1–2 表场景：完美匹配，`SchemaMappingResult.Success == true`。
   * 缺失目标列 / 源列，得到清晰错误，含具体表/列名。
   * Application → Reporting 场景：
@@ -971,3 +963,287 @@ This matches your “assign different AI coders per section” model and keeps f
   * 成功路径：所有子组件都成功，`SchemaAnalysisResult` 完整。
   * 任何一步失败：Facade 传播统一的错误结构（包含 inner 错误信息，不吞掉上下文）。
 
+---
+
+## Section 4 — PreFlight & Sync Orchestration（任务列表）
+
+### Task 4.1 — 定义 Sync 领域的“入口契约”与结果模型（Contracts/DTOs）
+
+**Structural Scope（涉及范围）**
+- Namespace（新增）：
+    - `ReportSyncer.Core.Sync`
+    - （可选）`ReportSyncer.Core.Observability`（只放 DTO，不放实现）
+        
+- 依赖（已存在/应已存在）：
+    - `ReportSyncer.Core.Configuration`：`IConfigurationProvider`, `SyncConfiguration`, `SyncJobConfig`, `RuntimeOverrides`, `RunConfig`
+    - `ReportSyncer.Core.Schema`：`ISchemaInspector` /（理想情况）`ISchemaService` facade、`SchemaSnapshot`、`SchemaInspectionRequest`
+    - `ReportSyncer.Core.Schema.Mapping`：`ISchemaMapper`（你当前实现是 `Result<T>` 风格）
+    - `ReportSyncer.Core.Exceptions`：`ConfigurationException`, `SchemaMismatchException`, `SyncExecutionException`
+
+**Interface Contract（关键接口契约）**
+- `public interface ISyncOrchestrator`
+    - `Task<JobResult> RunJobAsync(string configPath, string jobName, RuntimeOverrides? overrides, CancellationToken ct);`
+    - （可选重载）`Task<JobResult> RunJobAsync(SyncConfiguration effectiveConfig, SyncJobConfig job, CancellationToken ct);`
+- `public interface IPreFlightValidator`
+    - `Task<PreFlightResult> ValidateAsync(SyncConfiguration effectiveConfig, SyncJobConfig job, CancellationToken ct);`
+- DTO / Model（最小必须）
+    - `public sealed record PreFlightResult(string JobName, bool IsDryRun, SchemaAnalysisResult Schema, ExecutionPlan Plan /* + warnings */);`
+    - `public sealed record JobResult(string JobName, JobStatus Status, IReadOnlyList<TableResult> Tables, TimeSpan Duration /* + errors */);`
+    - `public enum JobStatus { Succeeded, Failed_PreFlight, Failed_Execution, Cancelled }`
+    - `public sealed record TableResult(string Table, TableStatus Status /* placeholders for later */);`
+    - `public enum TableStatus { Pending, Skipped_DryRun, Succeeded, Failed }`
+        
+- **关键设计约束（必须写死）**
+    - `ISyncOrchestrator` 是 **唯一** job 执行入口（Host 不得绕过它直接调用 schema/mapper/DB）。
+        
+
+**Logic & Invariants（规则 + Must-Not + 异常策略）**
+
+- Rule：**Pre-flight gate**  
+    `If PreFlightValidator throws/fails then orchestrator MUST NOT start any mutation (delete/insert).`
+    
+- Rule：**Validated config only**  
+    Orchestrator 必须从 `IConfigurationProvider.LoadAndValidateAsync(...)` 获取 effective config（你已有 Provider），**不得**直接用 loader / raw YAML。
+    
+- Rule：**`Result<T>` vs Exception 统一出口**  
+    你现有 `ISchemaMapper.MapJob(...)` 用 `Result<SchemaMappingResult>`。Section 4 必须规定：
+    - **PreFlight/Orchestrator 的外部边界用“域异常”**（`SchemaMismatchException` / `SyncExecutionException` 等）。
+    - 任何 `Result.Fail` 必须在 PreFlight 内被“翻译”为 `SchemaMismatchException`（包含 error 列表），避免把 `Result<T>` 泄漏到 host 层。
+        
+- Must-Not：
+    - 不得引用 `ReportSyncer.Console` / `ReportSyncer.WebApi`
+    - 不得做任何直接 SQL DML（Section 4 只做 preflight + plan；真正 delete/insert 属于后续 Section）
+    - 不得在 Core 内映射 exit code / HTTP code
+- Error Handling（必须明确）：
+    - 配置问题：`ConfigurationException`
+    - schema/mapping/依赖计划问题：`SchemaMismatchException`
+    - DB 连接/查询异常（非 schema mismatch）：`SyncExecutionException`
+    - cancellation：建议引入 `UserCancelledException`（若你还没建），否则统一由 orchestrator 把 `OperationCanceledException` 映射到 `JobStatus.Cancelled`
+        
+**Definition of Done（测试）**
+- Unit tests（必须）
+    - `SyncContracts_JobResult_IsImmutableAndCarriesStatus`
+    - `SyncOrchestrator_ExposesSingleEntryPoint_NoHostCoupling`（用编译依赖/namespace 约束思路做断言）
+- Integration tests（可先占位但建议立项）
+    - `Orchestrator_CanLoadConfigAndResolveJob_FromYamlFile`（只验证 config path→job resolve，不跑 DB）
+
+
+
+### Task 4.2 — 实现 PreFlightValidator（只负责“检查 + 产出计划”，不执行数据变更）
+
+**Structural Scope**
+
+- 新增：
+    
+    - `ReportSyncer.Core.Sync.PreFlightValidator : IPreFlightValidator`
+        
+- 依赖：
+    
+    - `ReportSyncer.Core.Schema.ISchemaService`（**强烈建议**：让 Section 3 产出一个 facade，避免 PreFlight 直接编排 Inspector/Mapper/DependencyValidator 一坨）
+        
+    - 或（如果你没做 schema facade）：`ISchemaInspector` + `ISchemaMapper` + `IDependencyResolver/JobDependencyValidator`（这会让 Section 4 变脏，你以后会后悔）
+        
+
+**Interface Contract**
+
+- `public sealed class PreFlightValidator : IPreFlightValidator`
+    
+    - `public Task<PreFlightResult> ValidateAsync(SyncConfiguration effectiveConfig, SyncJobConfig job, CancellationToken ct);`
+        
+
+**Logic & Invariants**
+
+- PreFlight 必须做的最小步骤（按顺序，写死）：
+    
+    1. **Resolve selected tables**：从 `job.TableTasks` 得到参与表集合（不要信任 UI 传入顺序）。
+        
+    2. **Schema analysis**（通过 `ISchemaService.AnalyzeJobAsync(job, ct)` 一次性拿到）：
+        
+        - Source：`SchemaInspectionLevel.ExistenceOnly`
+            
+        - Target：`SchemaInspectionLevel.Full`
+            
+        - mapping：调用你现有 `ISchemaMapper`（内部可用 `Result<T>`）
+            
+        - dependency closure + topo sort：输出 `ExecutionPlan`
+            
+    3. **Translate errors**：
+        
+        - schema service 或 mapper 返回失败：抛 `SchemaMismatchException`，异常里必须包含：
+            
+            - job name
+                
+            - failing table(s)
+                
+            - mapping / dependency error code 列表（你已有 `SchemaMappingErrorCode`）
+                
+    4. **DryRun 标记**：把 `RunConfig.DryRun` 写进 `PreFlightResult`，后续 orchestrator 只靠它决定是否执行 DML。
+        
+- Must-Not：
+    
+    - 不做权限探测/安全规则（除非你把它定义为 Section 4 范围；否则就别夹带私货）
+        
+    - 不做 row count 估算（那是后续 Observability/WorkEstimator 的事）
+        
+- Error Handling：
+    
+    - schema 相关一律 `SchemaMismatchException`
+        
+    - 任何 DB catalog 查询异常归 `SyncExecutionException`（不要抛原始 `SqlException`）
+        
+
+**Definition of Done（测试）**
+
+- Unit tests（必须）
+    
+    - `PreFlightValidator_WhenSchemaServiceReturnsFailure_ThrowsSchemaMismatchExceptionWithDetails`
+        
+    - `PreFlightValidator_CallsSchemaServiceOnce_WithJobSelectedTables`
+        
+    - `PreFlightValidator_DryRunFlag_PropagatesToPreFlightResult`
+        
+- Integration tests（必须，且应该用 LocalDB fixture）
+    
+    - `PreFlightValidator_WithLocalDbSchema_ReturnsExecutionPlan`（至少 2 表 1 FK）
+        
+    - `PreFlightValidator_SourceMissingTable_ThrowsSchemaMismatchException`
+        
+
+---
+
+### Task 4.3 — 实现 SyncOrchestrator（生命周期编排：Load → PreFlight →（后续 Section 才会执行））
+
+**Structural Scope**
+
+- 新增：
+    
+    - `ReportSyncer.Core.Sync.SyncOrchestrator : ISyncOrchestrator`
+        
+- 依赖：
+    
+    - `IConfigurationProvider`（你已有）
+        
+    - `IPreFlightValidator`（Task 4.2）
+        
+    - （先定义接口占位）`ITableRunner`（真正执行 delete/insert 的，留到后续 Section 实现）
+        
+    - `ILogService`（日志只做“发生了什么”，不做 Host 级格式化）
+        
+
+**Interface Contract**
+
+- `public sealed class SyncOrchestrator : ISyncOrchestrator`
+    
+    - `public async Task<JobResult> RunJobAsync(string configPath, string jobName, RuntimeOverrides? overrides, CancellationToken ct);`
+        
+- （可选）`ITableRunner`
+    
+    - `Task<TableResult> RunAsync(TableExecutionContext ctx, CancellationToken ct);`（ctx 里未来会放 mapping、plan、db context 等）
+        
+
+**Logic & Invariants**
+
+- Orchestrator 必须保证：
+    
+    - 先 `LoadAndValidateAsync(configPath, overrides, ct)`，再 resolve job，再 preflight
+        
+    - `If preflight fails => return/throw and JobStatus=Failed_PreFlight; MUST NOT call TableRunner`
+        
+    - cancellation：捕获 `OperationCanceledException` 并返回 `JobStatus.Cancelled`（或 throw `UserCancelledException`，但别两套并存）
+        
+    - dry-run：`If PreFlightResult.IsDryRun => do not call TableRunner; return JobResult with TableStatus=Skipped_DryRun`
+        
+- Must-Not：
+    
+    - 不得直接调用 `ISchemaInspector`/`ISchemaMapper`（都应该被 PreFlight 包住）
+        
+    - 不得写任何 SQL（包括 delete/insert/count）
+        
+- Error Handling：
+    
+    - 配置失败：让 `ConfigurationException` 直接冒泡（Host 去处理）
+        
+    - preflight schema 失败：`SchemaMismatchException` 冒泡
+        
+    - 其他运行失败：`SyncExecutionException` 冒泡
+        
+    - 不得吞异常后返回“成功”
+        
+
+**Definition of Done（测试）**
+
+- Unit tests（必须）
+    
+    - `SyncOrchestrator_PreFlightFails_DoesNotInvokeTableRunner`
+        
+    - `SyncOrchestrator_DryRun_DoesNotInvokeTableRunner_ReturnsSkippedTables`
+        
+    - `SyncOrchestrator_WhenCancelled_ReturnsCancelledStatus`（或 throw UserCancelledException 的断言）
+        
+    - `SyncOrchestrator_LoadsConfigThroughConfigurationProvider_Only`（确保没绕过 Provider）
+        
+- Integration tests（建议立项，至少 1 条）
+    
+    - `SyncOrchestrator_DryRun_EndToEnd_WithLocalDb_ReturnsPlanButNoMutation`（验证 target 行数不变）
+        
+
+---
+
+### Task 4.4 — 建立“可测试的编排缝”（Test Seams & Fakes），防止 Section 4 测试变成灾难
+
+**Structural Scope**
+
+- `ReportSyncer.Tests`（或你的测试项目实际名称）
+    
+    - `Unit/Sync/*`
+        
+    - `Integration/Sync/*`
+        
+- Test doubles（仅测试项目内部）
+    
+    - `FakeConfigurationProvider`
+        
+    - `FakeSchemaService`（或 fake inspector/mapper/resolver 组合）
+        
+    - `FakeTableRunner`
+        
+    - `FakeLogService`
+        
+
+**Interface Contract（测试约束，而非生产接口）**
+
+- 所有 fake 必须最小化：只实现接口，不引入额外“聪明逻辑”
+    
+- 提供 `TestConfigBuilder`（构造 `SyncConfiguration/SyncJobConfig` 的 helper），避免每个单测堆 YAML
+    
+
+**Logic & Invariants**
+
+- Must-Not：
+    
+    - 不把测试 helper 挪进 production code（别用“为了测试方便”污染 Core）
+        
+    - 不在 unit test 里连 DB
+        
+- Error Handling：
+    
+    - unit tests 用异常断言验证分类是否正确（尤其 `SchemaMismatchException` vs `SyncExecutionException`）
+        
+
+**Definition of Done（测试）**
+
+- Unit tests（必须）
+    
+    - `TestConfigBuilder_CanBuildMinimalValidConfigWithSingleJob`
+        
+    - `FakeSchemaService_CanSimulateFailureWithErrorCodes`
+        
+- Integration tests（必须）
+    
+    - 建立 LocalDB fixture（一次建库、多测复用），并能创建：
+        
+        - identity 表
+            
+        - FK 依赖表
+            
+        - 1 个“缺表”场景
