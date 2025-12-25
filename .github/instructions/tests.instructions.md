@@ -3,7 +3,6 @@
 # Testing Instruction (C# / xUnit)
 
 These rules define how to write, organize, and run tests in this repository. The goal is fast feedback, high signal, deterministic behavior, and clear separation between pure unit tests and environment-coupled integration tests.
-
 ## 1) Frameworks and style
 
 1. Use **xUnit** for all tests.
@@ -172,3 +171,26 @@ For integration tests, extract heavy Arrange steps into:
 * helper methods
 * builders
 Keep the test body focused on the behavior being validated and the expected side effects.
+
+## 13) Refactoring & Optimization Standards
+
+To ensure test maintainability and architectural integrity, all test code must adhere to these optimization patterns:
+
+### A) Test Infrastructure & Reusability
+
+1. **Extract Shared Test Doubles**: Do not define `Fake` or `Mock` classes inside the test file. Move them to a centralized location (e.g., `ReportSyncer.Tests/Helpers/TestDoubles/`) to allow reuse across different test suites.
+2. **Test Object Builders**: Avoid using long constructors for DTOs or Config objects inside the `Arrange` block. Implement a **Builder Pattern** or a **TestData Factory** (e.g., `JobBuilder`, `ConfigFactory`) to provide semantic defaults and reduce boilerplate.
+3. **Shared Test Base**: If multiple test classes share identical setup logic (e.g., initializing the same three Mocks), extract them into a `TestBase` class (e.g., `SchemaServiceTestBase`) to keep individual tests focused on unique logic.
+### B) Parameterization & Logic Compression
+
+1. **Mandatory Theory Usage**: For scenarios testing multiple variations of the same logic (e.g., invalid identifiers, empty strings, null checks), you **must** use `[Theory]` with `[InlineData]` instead of creating multiple `[Fact]` methods.
+2. **Deduplicate Arrange Logic**: Use factory methods with optional parameters to create complex objects, ensuring that a change in a constructor doesn't break 50 different tests.
+### C) Behavioral Verification & Robustness
+
+1. **Enhanced Call Tracking**: Fakes must be capable of behavioral verification. Include a `List<T> CapturedRequests` or `CallCount` property in `Fake` classes to track how many times and with what arguments a dependency was invoked.
+2. **Error Simulation**: Fakes and Mocks must support exception injection (e.g., an `ExceptionToThrow` property) to test how the service handles transient database or network failures.
+### D) Readability & Style
+
+1. **Strict AAA Annotations**: Every test method must clearly label the `// Arrange`, `// Act`, and `// Assert` phases to guide the reader.
+2. **No Magic Strings**: Replace hardcoded values with constants (e.g., `TestData.DefaultSourceTable`) at the class or project level to prevent "magic string" drift.
+3. **Fluent Chain Assertions**: Maximize the use of **FluentAssertions** chainable syntax (e.g., `.Should().BeTrue().And.Contain("error")`) for more compact and readable validation.
