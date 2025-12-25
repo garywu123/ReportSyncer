@@ -26,7 +26,7 @@ public class YamlConfigurationLoaderUnitTests
         Assert.NotNull(cfg);
         Assert.Equal("1.1", cfg.Version);
         Assert.NotEmpty(cfg.Connections);
-        Assert.True(cfg.SyncJobs.Length >= 1);
+        Assert.True(cfg.SyncJobs.Count >= 1);
     }
 
     [Fact]
@@ -34,14 +34,6 @@ public class YamlConfigurationLoaderUnitTests
     {
         Assert.Throws<ConfigurationException>(() =>
             ConfigurationYamlTestHelper.LoadFromYamlFile("sync_invalid_unknown_key.yaml")
-        );
-    }
-
-    [Fact]
-    public void LoadFromHelper_WithUnknownNestedKey_ThrowsConfigurationException()
-    {
-        Assert.Throws<ConfigurationException>(() =>
-            ConfigurationYamlTestHelper.LoadFromYamlFile("sync_invalid_unknown_nested_key.yaml")
         );
     }
 
@@ -158,19 +150,6 @@ public class YamlConfigurationLoaderUnitTests
     }
 
     [Fact]
-    public async Task LoadAsync_WithUnknownNestedKey_ThrowsConfigurationException_Async()
-    {
-        var path = GetTestFilePath("sync_invalid_unknown_nested_key.yaml");
-        Assert.True(File.Exists(path), $"Test YAML not found: {path}");
-
-        var loader = new YamlConfigurationLoader(new DummyLogService());
-        await Assert.ThrowsAsync<ConfigurationException>(async () =>
-        {
-            await loader.LoadAsync(path, CancellationToken.None);
-        });
-    }
-
-    [Fact]
     public async Task LoadAsync_WithWrongPrimitiveType_ThrowsConfigurationException_Async()
     {
         var path = GetTestFilePath("sync_invalid_wrong_primitive_type.yaml");
@@ -210,13 +189,13 @@ public class YamlConfigurationLoaderUnitTests
     }
 
     [Fact]
-    public async Task LoadAsync_WithNonExistingFilePath_ThrowsConfigurationException_Async()
+    public async Task LoadAsync_WithNonExistingFilePath_ThrowsFileNotFoundException_Async()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nonexistent_config_{Guid.NewGuid():N}.yaml");
         Assert.False(File.Exists(path), $"Test file unexpectedly exists: {path}");
 
         var loader = new YamlConfigurationLoader(new DummyLogService());
-        await Assert.ThrowsAsync<ConfigurationException>(async () =>
+        await Assert.ThrowsAsync<FileNotFoundException>(async () =>
         {
             await loader.LoadAsync(path, CancellationToken.None);
         });

@@ -18,7 +18,7 @@ public sealed class SchemaSnapshot
 
     public SchemaSnapshot(IEnumerable<TableSchema> tables, SchemaRole role, SchemaInspectionLevel level)
     {
-        if (tables is null) throw new ArgumentNullException(nameof(tables));
+        ArgumentNullException.ThrowIfNull(tables);
         Role  = role;
         Level = level;
         // TableIdentifier implements case-insensitive equality for names.

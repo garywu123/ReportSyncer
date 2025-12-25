@@ -42,9 +42,16 @@ namespace ReportSyncer.Core.Configuration
         /// <summary>
         /// YamlDotNet deserializer configured to use camel-case naming and to ignore unmatched properties.
         /// </summary>
+        /// <remarks>
+        /// IgnoreUnmatchedProperties is enabled to support:
+        /// - Forward/backward compatibility when new optional fields are added to the YAML schema
+        /// - Flexibility in YAML authoring (optional fields can be omitted)
+        /// Top-level key validation is enforced separately via ValidateTopLevelKeys.
+        /// </remarks>
         private static readonly IDeserializer Deserializer =
             new DeserializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
                 .Build();
 
         private readonly ILogService _log;
@@ -103,13 +110,16 @@ namespace ReportSyncer.Core.Configuration
         /// <param name="path">Absolute path to the configuration file.</param>
         /// <param name="ct">Cancellation token for the operation.</param>
         /// <returns>The file contents as a string.</returns>
-        internal static Task<string> ReadFileAsync(string path, CancellationToken ct)
-        {
-            if (!File.Exists(path))
-                throw new ConfigurationException($"Configuration file not found: {path}");
-
-            return File.ReadAllTextAsync(path, ct);
-        }
+        /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+        /// <exception cref="IOException">Thrown when file I/O fails.</exception>
+        /// <remarks>
+        /// This method does NOT wrap file I/O exceptions in ConfigurationException.
+        /// File I/O errors (missing file, access denied, etc.) are distinct from
+        /// configuration content errors (invalid YAML, missing required fields, etc.)
+        /// and should be handled separately by the caller or host layer.
+        /// </remarks>
+        internal static Task<string> ReadFileAsync(string path, CancellationToken ct) =>
+            File.ReadAllTextAsync(path, ct);
 
         /// <summary>
         /// Parses the YAML document and returns the root mapping node.

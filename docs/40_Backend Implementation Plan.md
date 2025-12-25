@@ -468,14 +468,18 @@ Transform a YAML configuration file into the domain model from Task 2.1 with:
 
 **Class:** `ConfigurationLoadingIntegrationTests`
 
+**Note on error classification**: 
+- **File I/O errors** (missing file, access denied) should propagate as `FileNotFoundException` or `IOException` – these are infrastructure problems, not configuration content problems.
+- **Configuration content errors** (invalid YAML syntax, missing required fields, invalid enum values) should throw `ConfigurationException`.
+
 | Test method name                                                               | Why test this                                                                                                | Expected result                                                                                                                                                                              |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `LoadAsync_WithValidMinimalConfigFile_LoadsSuccessfully`                       | Prove that a minimal, on-disk YAML file goes through real file IO + YAML parsing and returns a valid config. | Given `sync_valid_minimal.yaml` on disk, loader completes without exception; `SyncConfiguration` is non-null; basic counts and key values match the file.                                    |
 | `LoadAsync_WithValidFullConfigFile_LoadsAllSections`                           | End-to-end check that a realistic full config file loads correctly with IO + parsing + mapping.              | Given `sync_valid_full.yaml`, loader completes without exception; all sections (run, safety, schema, connections, jobs, tables, filters) are populated and match the YAML contents.          |
-| `LoadAsync_WithConfigFileContainingUnknownKey_ThrowsConfigurationException`    | Ensure unknown keys in a real file are rejected with a clear error instead of being ignored.                 | Given `sync_invalid_unknown_key.yaml` with extra field(s), call throws `ConfigurationException`; message mentions unknown field / invalid configuration and ideally includes the field name. |
+| `LoadAsync_WithConfigFileContainingUnknownTopLevelKey_ThrowsConfigurationException` | Ensure unknown **top-level** keys in a real file are rejected with a clear error.                      | Given `sync_invalid_unknown_key.yaml` with extra top-level field(s), call throws `ConfigurationException`; message mentions unknown field and ideally includes the field name.              |
 | `LoadAsync_WithConfigFileContainingInvalidPolicy_ThrowsConfigurationException` | Validate real-file behavior when policy-like values are invalid (schema policy, safety mode, etc.).          | Given `sync_invalid_schema_policy_value.yaml`, call throws `ConfigurationException`; message indicates invalid value and which setting failed.                                               |
 | `LoadAsync_WithConfigFileContainingBadYaml_ThrowsConfigurationException`       | Verify corrupt YAML on disk is reported clearly to the caller.                                               | Given `sync_invalid_syntax.yaml`, call throws `ConfigurationException`; message points to YAML parse failure and includes the file path or enough context for troubleshooting.               |
-| `LoadAsync_WithNonExistingFilePath_ThrowsConfigurationException`               | Ensure missing files become a clean configuration error that higher layers can show to the user.             | Passing a non-existent path throws `ConfigurationException`; message includes the missing path; no raw `FileNotFoundException` leaks out of the loader boundary.                             |
+| `LoadAsync_WithNonExistingFilePath_ThrowsFileNotFoundException`                | Ensure missing files are reported as I/O errors, not configuration errors.                                   | Passing a non-existent path throws `FileNotFoundException` (or `IOException`); this is an infrastructure problem, distinct from configuration content validation.                            |
 
 You can drop these tables straight into the implementation plan under Task 2.2.1 / 2.2.2.
 
@@ -914,187 +918,193 @@ This matches your “assign different AI coders per section” model and keeps f
   * 更复杂图中只漏一部分依赖，确保错误能覆盖所有缺失项。
   * 错误信息聚合成可读结构（便于前端/CLI 展示）。
 
----
-
-### Task 3.6：Schema & Dependency Facade，供 PreFlight / Orchestrator 调用
-
-**目标**
-对上层（`PreFlightValidator` / `SyncOrchestrator`）提供一个统一入口，而不是到处手动拼 ISchemaInspector / SchemaMapper / IDependencyResolver。
-
-**主要产物**
-
-* 新接口 `ISchemaService`（命名随你，只要清晰）：
-
-  * 示例方法：
-
-    ```csharp
-    Task<Result<SchemaAnalysisResult>> AnalyzeJobAsync(
-        SyncConfiguration config,
-        SyncJob job,
-        CancellationToken ct);
-    ```
-  * `SchemaAnalysisResult` 包含：
-
-    * 源/目标 `SchemaSnapshot`
-    * 每个 `TableTask` 的 `TableMapping`
-    * 当前 job 的 `DependencyPlan`
-* 实现类 `SchemaService`：
-
-  * 内部调用：
-
-    * `ISchemaInspector`（源 + 目标）
-    * `SchemaMapper`
-    * `IDependencyResolver`
-    * `JobDependencyValidator`
-  * 统一组合错误：
-
-    * 连接 / schema 拉取失败
-    * 映射失败
-    * 依赖闭包检查失败
-    * 拓扑排序失败
-* 与后续章节的关系：
-
-  * Section 4 / PreFlight 只需要调用 `ISchemaService.AnalyzeJobAsync`，不直接了解底层细节。
-
-**测试要点**
-
-* 使用 stub / fake 的 ISchemaInspector / SchemaMapper / IDependencyResolver / JobDependencyValidator：
-
-  * 成功路径：所有子组件都成功，`SchemaAnalysisResult` 完整。
-  * 任何一步失败：Facade 传播统一的错误结构（包含 inner 错误信息，不吞掉上下文）。
 
 ---
 
 ## Section 4 — PreFlight & Sync Orchestration（任务列表）
 
-### Task 4.1 — 定义 Sync 领域的“入口契约”与结果模型（Contracts/DTOs）
 
-**Structural Scope（涉及范围）**
-- Namespace（新增）：
-    - `ReportSyncer.Core.Sync`
-    - （可选）`ReportSyncer.Core.Observability`（只放 DTO，不放实现）
-        
-- 依赖（已存在/应已存在）：
-    - `ReportSyncer.Core.Configuration`：`IConfigurationProvider`, `SyncConfiguration`, `SyncJobConfig`, `RuntimeOverrides`, `RunConfig`
-    - `ReportSyncer.Core.Schema`：`ISchemaInspector` /（理想情况）`ISchemaService` facade、`SchemaSnapshot`、`SchemaInspectionRequest`
-    - `ReportSyncer.Core.Schema.Mapping`：`ISchemaMapper`（你当前实现是 `Result<T>` 风格）
-    - `ReportSyncer.Core.Exceptions`：`ConfigurationException`, `SchemaMismatchException`, `SyncExecutionException`
+> 先把话说清楚：你现在的 Core 代码里 **确实没有** `ReportSyncer.Core.Sync/*`，也 **没有** `ISchemaService / SchemaService`，更没有你吐槽的 `IDependencyResolver`（表依赖拓扑排序那套）。
+> 
+> 你已经完成/具备的（Section 3 可复用）：
+> - `ReportSyncer.Core.Configuration`：`IConfigurationProvider/ConfigurationProvider`（含 `LoadAndValidateAsync(path, overrides, ct)`）、YAML loader、validator、`ConfigurationException`。
+> - `ReportSyncer.Core.Schema`：`ISchemaInspector` + `SqlServerSchemaInspector`（至少支持 `SchemaInspectionLevel.Full`）、`SchemaSnapshot/TableSchema/ColumnSchema/ForeignKeySchema` 等模型。
+> - `ReportSyncer.Core.Schema.Mapping`：`ISchemaMapper` + `SchemaMapper`（Result 风格）。
+> - `ReportSyncer.Core.Exceptions`：`SchemaMismatchException`、`SyncExecutionException`。
 
-**Interface Contract（关键接口契约）**
-- `public interface ISyncOrchestrator`
-    - `Task<JobResult> RunJobAsync(string configPath, string jobName, RuntimeOverrides? overrides, CancellationToken ct);`
-    - （可选重载）`Task<JobResult> RunJobAsync(SyncConfiguration effectiveConfig, SyncJobConfig job, CancellationToken ct);`
-- `public interface IPreFlightValidator`
-    - `Task<PreFlightResult> ValidateAsync(SyncConfiguration effectiveConfig, SyncJobConfig job, CancellationToken ct);`
-- DTO / Model（最小必须）
-    - `public sealed record PreFlightResult(string JobName, bool IsDryRun, SchemaAnalysisResult Schema, ExecutionPlan Plan /* + warnings */);`
-    - `public sealed record JobResult(string JobName, JobStatus Status, IReadOnlyList<TableResult> Tables, TimeSpan Duration /* + errors */);`
-    - `public enum JobStatus { Succeeded, Failed_PreFlight, Failed_Execution, Cancelled }`
-    - `public sealed record TableResult(string Table, TableStatus Status /* placeholders for later */);`
-    - `public enum TableStatus { Pending, Skipped_DryRun, Succeeded, Failed }`
-        
-- **关键设计约束（必须写死）**
-    - `ISyncOrchestrator` 是 **唯一** job 执行入口（Host 不得绕过它直接调用 schema/mapper/DB）。
-        
+> 你**没有**的（所以本 Section 必须补齐，否则 Section 4 根本没法衔接）：
+> - `IDependencyResolver` / `ExecutionPlan`（PRD 依赖排序 + 缺失 parent 表检测要求）。
+> - `ISchemaService` / `SchemaService`（原 Implementation Plan 里写在 Task 3.6，但你没实现）。
+> - `PreFlightValidator` / `SyncOrchestrator`（Sync 领域入口）。
+---
 
-**Logic & Invariants（规则 + Must-Not + 异常策略）**
+## 4.1 本 Section 的目标（可验证）
 
-- Rule：**Pre-flight gate**  
-    `If PreFlightValidator throws/fails then orchestrator MUST NOT start any mutation (delete/insert).`
+- **Goal A（PreFlight Gate）**：任何 schema/mapping/dependency 失败必须阻断后续执行（先只做到“阻断”，真正执行留到 Section 5）。
+- **Goal B（依赖排序与缺失父表报错）**：对选中的 Target tables 建图、检测 missing parents、拓扑排序输出可执行顺序。
+- **Goal C（Backend 入口成型）**：提供 `ISyncOrchestrator.RunJobAsync(...)`，能从 configPath 装载配置、resolve job、跑完 preflight 并返回结构化结果（DryRun 模式下返回 “不会执行任何 DML” 的结果）。
+**Non-goals（这轮不做）**
+- 不做真实 Delete/Insert（`ITableRunner` / `SqlDataWriter` 属于 Section 5）。
+- 不做 permissions/safety/work-estimation（文档里有，但代码里你也没实现，别硬塞进来）。
+
+---
+
+## 4.2 Task 列表（更新版，按“真实缺口”重新排序）
+
+### Task 4.0 — 实现 Dependency Planning（IDependencyResolver + ExecutionPlan）
+
+**新增路径（建议）**
+- `ReportSyncer.Core/Schema/Dependency/IDependencyResolver.cs`
+- `ReportSyncer.Core/Schema/Dependency/DependencyResolver.cs`
+- `ReportSyncer.Core/Schema/Dependency/ExecutionPlan.cs`
+- `ReportSyncer.Core/Schema/Dependency/DependencyError.cs`（或 `DependencyErrorCode`）
     
-- Rule：**Validated config only**  
-    Orchestrator 必须从 `IConfigurationProvider.LoadAndValidateAsync(...)` 获取 effective config（你已有 Provider），**不得**直接用 loader / raw YAML。
+**接口契约（英文）**
+
+```csharp
+namespace ReportSyncer.Core.Schema.Dependency;
+
+public interface IDependencyResolver
+{
+    Result<ExecutionPlan> BuildExecutionPlan(
+        SchemaSnapshot targetSnapshot,
+        IReadOnlyList<TableIdentifier> selectedTargetTables);
+}
+
+public sealed record ExecutionPlan(
+    IReadOnlyList<TableIdentifier> InsertOrder,
+    IReadOnlyList<TableIdentifier> DeleteOrder);
+```
+
+**规则（写死）**
+
+- Rule 1：只使用 **Target FK 图** 建依赖（Source FK 不参与排序）。
+- Rule 2：如果 selected 表 A 有 FK 指向表 B，但 B 不在 selected 集合里 → `Result.Fail`（错误里必须带 A、B）。
+- Rule 3：如果图中存在 cycle → `Result.Fail`（错误里列出 cycle path，最少给出参与节点）。
+- Rule 4：输出 `InsertOrder = parents -> children`，`DeleteOrder = reverse(InsertOrder)`（先简单正确）。
     
-- Rule：**`Result<T>` vs Exception 统一出口**  
-    你现有 `ISchemaMapper.MapJob(...)` 用 `Result<SchemaMappingResult>`。Section 4 必须规定：
-    - **PreFlight/Orchestrator 的外部边界用“域异常”**（`SchemaMismatchException` / `SyncExecutionException` 等）。
-    - 任何 `Result.Fail` 必须在 PreFlight 内被“翻译”为 `SchemaMismatchException`（包含 error 列表），避免把 `Result<T>` 泄漏到 host 层。
-        
-- Must-Not：
-    - 不得引用 `ReportSyncer.Console` / `ReportSyncer.WebApi`
-    - 不得做任何直接 SQL DML（Section 4 只做 preflight + plan；真正 delete/insert 属于后续 Section）
-    - 不得在 Core 内映射 exit code / HTTP code
-- Error Handling（必须明确）：
-    - 配置问题：`ConfigurationException`
-    - schema/mapping/依赖计划问题：`SchemaMismatchException`
-    - DB 连接/查询异常（非 schema mismatch）：`SyncExecutionException`
-    - cancellation：建议引入 `UserCancelledException`（若你还没建），否则统一由 orchestrator 把 `OperationCanceledException` 映射到 `JobStatus.Cancelled`
-        
 **Definition of Done（测试）**
-- Unit tests（必须）
-    - `SyncContracts_JobResult_IsImmutableAndCarriesStatus`
-    - `SyncOrchestrator_ExposesSingleEntryPoint_NoHostCoupling`（用编译依赖/namespace 约束思路做断言）
-- Integration tests（可先占位但建议立项）
-    - `Orchestrator_CanLoadConfigAndResolveJob_FromYamlFile`（只验证 config path→job resolve，不跑 DB）
+- Unit:
+    - `DependencyResolver_MissingParentTable_FailsWithClearError`
+    - `DependencyResolver_WithTwoTablesOneFk_ReturnsParentBeforeChild`
+    - `DependencyResolver_WithCycle_Fails`
+---
 
+### Task 4.1 — 补齐 Schema Facade：ISchemaService / SchemaService（从原 Task 3.6 搬过来）
 
+**新增路径（建议）**
 
-### Task 4.2 — 实现 PreFlightValidator（只负责“检查 + 产出计划”，不执行数据变更）
-
-**Structural Scope**
-
-- 新增：
+- `ReportSyncer.Core/Schema/Services/ISchemaService.cs`
+- `ReportSyncer.Core/Schema/Services/SchemaService.cs`
+- `ReportSyncer.Core/Schema/Services/SchemaAnalysisResult.cs`
     
-    - `ReportSyncer.Core.Sync.PreFlightValidator : IPreFlightValidator`
+**接口契约（英文）**
+
+```csharp
+namespace ReportSyncer.Core.Schema.Services;
+
+public interface ISchemaService
+{
+    Task<Result<SchemaAnalysisResult>> AnalyzeJobAsync(
+        SyncConfiguration effectiveConfig,
+        SyncJobConfig job,
+        CancellationToken ct);
+}
+
+public sealed record SchemaAnalysisResult(
+    SchemaSnapshot SourceSnapshot,
+    SchemaSnapshot TargetSnapshot,
+    SchemaMappingResult Mapping,
+    ExecutionPlan ExecutionPlan);
+```
+
+**实现要点（不允许乱）**
+
+1. 解析 job 的 selected tables（只包含 enabled 的 table tasks，且以 **Target 表名**作为依赖图节点）。
+2. 调用 `ISchemaInspector`：
+    - Source：用“最低成本、只保证表存在 + 列信息够 mapping 的 level”（你的 enum 名字以 repo 为准）。
+    - Target：`SchemaInspectionLevel.Full`。
         
-- 依赖：
+3. 调用 `ISchemaMapper` 生成 mapping。
+4. 调用 `IDependencyResolver.BuildExecutionPlan(targetSnapshot, selectedTargets)`。
+5. 任一步失败：返回 `Result.Fail`，**不要在这里 throw**（throw 留给 PreFlight 做统一翻译）。
     
-    - `ReportSyncer.Core.Schema.ISchemaService`（**强烈建议**：让 Section 3 产出一个 facade，避免 PreFlight 直接编排 Inspector/Mapper/DependencyValidator 一坨）
-        
-    - 或（如果你没做 schema facade）：`ISchemaInspector` + `ISchemaMapper` + `IDependencyResolver/JobDependencyValidator`（这会让 Section 4 变脏，你以后会后悔）
+**Definition of Done（测试）**
+- Unit（用 fake/stub，不碰真实 DB）：
+    - `SchemaService_WhenInspectorFails_ReturnsFail`
+    - `SchemaService_WhenMapperFails_ReturnsFailWithMappingErrors`
+    - `SchemaService_WhenDependencyFails_ReturnsFailWithDependencyErrors`
+    - `SchemaService_WhenAllOk_ReturnsCompleteSchemaAnalysisResult`
         
 
-**Interface Contract**
+---
 
-- `public sealed class PreFlightValidator : IPreFlightValidator`
-    
-    - `public Task<PreFlightResult> ValidateAsync(SyncConfiguration effectiveConfig, SyncJobConfig job, CancellationToken ct);`
-        
+### Task 4.2 — 定义 Sync 领域 Contracts（DTO + 状态枚举 + 接口）
 
-**Logic & Invariants**
+**新增路径（建议）**
 
-- PreFlight 必须做的最小步骤（按顺序，写死）：
+- `ReportSyncer.Core/Sync/ISyncOrchestrator.cs`
     
-    1. **Resolve selected tables**：从 `job.TableTasks` 得到参与表集合（不要信任 UI 传入顺序）。
-        
-    2. **Schema analysis**（通过 `ISchemaService.AnalyzeJobAsync(job, ct)` 一次性拿到）：
-        
-        - Source：`SchemaInspectionLevel.ExistenceOnly`
-            
-        - Target：`SchemaInspectionLevel.Full`
-            
-        - mapping：调用你现有 `ISchemaMapper`（内部可用 `Result<T>`）
-            
-        - dependency closure + topo sort：输出 `ExecutionPlan`
-            
-    3. **Translate errors**：
-        
-        - schema service 或 mapper 返回失败：抛 `SchemaMismatchException`，异常里必须包含：
-            
-            - job name
-                
-            - failing table(s)
-                
-            - mapping / dependency error code 列表（你已有 `SchemaMappingErrorCode`）
-                
-    4. **DryRun 标记**：把 `RunConfig.DryRun` 写进 `PreFlightResult`，后续 orchestrator 只靠它决定是否执行 DML。
-        
-- Must-Not：
+- `ReportSyncer.Core/Sync/IPreFlightValidator.cs`
     
-    - 不做权限探测/安全规则（除非你把它定义为 Section 4 范围；否则就别夹带私货）
-        
-    - 不做 row count 估算（那是后续 Observability/WorkEstimator 的事）
-        
-- Error Handling：
+- `ReportSyncer.Core/Sync/Contracts/JobStatus.cs`
     
-    - schema 相关一律 `SchemaMismatchException`
-        
-    - 任何 DB catalog 查询异常归 `SyncExecutionException`（不要抛原始 `SqlException`）
-        
+- `ReportSyncer.Core/Sync/Contracts/TableStatus.cs`
+    
+- `ReportSyncer.Core/Sync/Contracts/JobResult.cs`
+    
+- `ReportSyncer.Core/Sync/Contracts/TableResult.cs`
+    
+- `ReportSyncer.Core/Sync/Contracts/PreFlightResult.cs`
+    
+
+**接口契约（英文）**
+
+```csharp
+namespace ReportSyncer.Core.Sync;
+
+public interface ISyncOrchestrator
+{
+    Task<JobResult> RunJobAsync(
+        string configPath,
+        string jobName,
+        RuntimeOverrides? overrides,
+        CancellationToken ct);
+}
+
+public interface IPreFlightValidator
+{
+    Task<PreFlightResult> ValidateAsync(
+        SyncConfiguration effectiveConfig,
+        SyncJobConfig job,
+        CancellationToken ct);
+}
+```
+
+---
+
+### Task 4.3 — 实现 PreFlightValidator（只做检查 + 产出计划）
+
+**新增路径**
+
+- `ReportSyncer.Core/Sync/PreFlightValidator.cs`
+    
+
+**依赖（必须）**
+
+- `ISchemaService`（Task 4.1）
+    
+
+**规则（写死）**
+
+- Rule 1：`AnalyzeJobAsync` 返回 Fail → 抛 `SchemaMismatchException`，message 必须包含 job name + 至少一个失败原因（mapping 或 dependency）。
+    
+- Rule 2：`RunConfig.dryRun` 只作为 flag 透传，不在这里做执行决策（决策在 Orchestrator）。
+    
 
 **Definition of Done（测试）**
 
-- Unit tests（必须）
+- Unit:
     
     - `PreFlightValidator_WhenSchemaServiceReturnsFailure_ThrowsSchemaMismatchExceptionWithDetails`
         
@@ -1102,148 +1112,72 @@ This matches your “assign different AI coders per section” model and keeps f
         
     - `PreFlightValidator_DryRunFlag_PropagatesToPreFlightResult`
         
-- Integration tests（必须，且应该用 LocalDB fixture）
+- Integration（建议用 LocalDB，2 表 1 FK）：
     
-    - `PreFlightValidator_WithLocalDbSchema_ReturnsExecutionPlan`（至少 2 表 1 FK）
+    - `PreFlightValidator_WithLocalDbSchema_ReturnsExecutionPlan`
         
     - `PreFlightValidator_SourceMissingTable_ThrowsSchemaMismatchException`
         
 
 ---
 
-### Task 4.3 — 实现 SyncOrchestrator（生命周期编排：Load → PreFlight →（后续 Section 才会执行））
+### Task 4.4 — 实现 SyncOrchestrator（Load → Resolve Job → PreFlight → 返回结果）
 
-**Structural Scope**
+**新增路径**
 
-- 新增：
+- `ReportSyncer.Core/Sync/SyncOrchestrator.cs`
     
-    - `ReportSyncer.Core.Sync.SyncOrchestrator : ISyncOrchestrator`
-        
-- 依赖：
-    
-    - `IConfigurationProvider`（你已有）
-        
-    - `IPreFlightValidator`（Task 4.2）
-        
-    - （先定义接口占位）`ITableRunner`（真正执行 delete/insert 的，留到后续 Section 实现）
-        
-    - `ILogService`（日志只做“发生了什么”，不做 Host 级格式化）
-        
 
-**Interface Contract**
+**依赖（必须）**
 
-- `public sealed class SyncOrchestrator : ISyncOrchestrator`
+- `IConfigurationProvider`（已存在）
     
-    - `public async Task<JobResult> RunJobAsync(string configPath, string jobName, RuntimeOverrides? overrides, CancellationToken ct);`
-        
-- （可选）`ITableRunner`
+- `IPreFlightValidator`（Task 4.3）
     
-    - `Task<TableResult> RunAsync(TableExecutionContext ctx, CancellationToken ct);`（ctx 里未来会放 mapping、plan、db context 等）
-        
 
-**Logic & Invariants**
+**规则（写死）**
 
-- Orchestrator 必须保证：
+- Rule 1：必须先 `LoadAndValidateAsync(configPath, overrides, ct)`，再 resolve job，再 preflight。
     
-    - 先 `LoadAndValidateAsync(configPath, overrides, ct)`，再 resolve job，再 preflight
-        
-    - `If preflight fails => return/throw and JobStatus=Failed_PreFlight; MUST NOT call TableRunner`
-        
-    - cancellation：捕获 `OperationCanceledException` 并返回 `JobStatus.Cancelled`（或 throw `UserCancelledException`，但别两套并存）
-        
-    - dry-run：`If PreFlightResult.IsDryRun => do not call TableRunner; return JobResult with TableStatus=Skipped_DryRun`
-        
-- Must-Not：
+- Rule 2：PreFlight 抛任何异常 → Orchestrator 不得吞，直接冒泡。
     
-    - 不得直接调用 `ISchemaInspector`/`ISchemaMapper`（都应该被 PreFlight 包住）
-        
-    - 不得写任何 SQL（包括 delete/insert/count）
-        
-- Error Handling：
+- Rule 3：如果是 dry-run：返回 `JobResult`，每张表标记 `Skipped_DryRun`（或等价状态）。
     
-    - 配置失败：让 `ConfigurationException` 直接冒泡（Host 去处理）
-        
-    - preflight schema 失败：`SchemaMismatchException` 冒泡
-        
-    - 其他运行失败：`SyncExecutionException` 冒泡
-        
-    - 不得吞异常后返回“成功”
-        
+- Rule 4：如果不是 dry-run：明确抛 `SyncExecutionException("Execution engine not implemented. Implement Section 5.")`。
+    
 
 **Definition of Done（测试）**
 
-- Unit tests（必须）
+- Unit:
     
-    - `SyncOrchestrator_PreFlightFails_DoesNotInvokeTableRunner`
+    - `SyncOrchestrator_LoadsConfig_ResolvesJob_ThenCallsPreFlight`
         
-    - `SyncOrchestrator_DryRun_DoesNotInvokeTableRunner_ReturnsSkippedTables`
+    - `SyncOrchestrator_WhenPreFlightThrows_DoesNotProceed`
         
-    - `SyncOrchestrator_WhenCancelled_ReturnsCancelledStatus`（或 throw UserCancelledException 的断言）
-        
-    - `SyncOrchestrator_LoadsConfigThroughConfigurationProvider_Only`（确保没绕过 Provider）
-        
-- Integration tests（建议立项，至少 1 条）
-    
-    - `SyncOrchestrator_DryRun_EndToEnd_WithLocalDb_ReturnsPlanButNoMutation`（验证 target 行数不变）
+    - `SyncOrchestrator_WhenDryRun_ReturnsJobResultWithSkippedTables`
         
 
 ---
 
-### Task 4.4 — 建立“可测试的编排缝”（Test Seams & Fakes），防止 Section 4 测试变成灾难
+### Task 4.5 — 建立可测试缝（Fakes / Test Helpers）
 
-**Structural Scope**
+**目的**：让 Unit Test 不需要真实 DB、不需要真实 YAML（你 YAML 单测已经做过了，别再浪费生命）。
 
-- `ReportSyncer.Tests`（或你的测试项目实际名称）
+**建议产物**
+
+- `ReportSyncer.Core.Tests/Helpers/FakeSchemaService.cs`
     
-    - `Unit/Sync/*`
-        
-    - `Integration/Sync/*`
-        
-- Test doubles（仅测试项目内部）
+- `ReportSyncer.Core.Tests/Helpers/FakeConfigurationProvider.cs`
     
-    - `FakeConfigurationProvider`
-        
-    - `FakeSchemaService`（或 fake inspector/mapper/resolver 组合）
-        
-    - `FakeTableRunner`
-        
-    - `FakeLogService`
-        
-
-**Interface Contract（测试约束，而非生产接口）**
-
-- 所有 fake 必须最小化：只实现接口，不引入额外“聪明逻辑”
-    
-- 提供 `TestConfigBuilder`（构造 `SyncConfiguration/SyncJobConfig` 的 helper），避免每个单测堆 YAML
+- `ReportSyncer.Core.Tests/Helpers/TestJobFactory.cs`
     
 
-**Logic & Invariants**
+---
 
-- Must-Not：
-    
-    - 不把测试 helper 挪进 production code（别用“为了测试方便”污染 Core）
-        
-    - 不在 unit test 里连 DB
-        
-- Error Handling：
-    
-    - unit tests 用异常断言验证分类是否正确（尤其 `SchemaMismatchException` vs `SyncExecutionException`）
-        
+## 4.3 为什么这版能衔接（而不是“驴唇不对马嘴”）
 
-**Definition of Done（测试）**
-
-- Unit tests（必须）
+- 之前的 Section 4 假设你已经完成 `ISchemaService` 和 `IDependencyResolver`，但你没做，所以当然对不上。
     
-    - `TestConfigBuilder_CanBuildMinimalValidConfigWithSingleJob`
-        
-    - `FakeSchemaService_CanSimulateFailureWithErrorCodes`
-        
-- Integration tests（必须）
+- 这版 Section 4 把**真实缺口**前置成 Task 4.0/4.1，然后才开始 Sync 领域（4.2+）。
     
-    - 建立 LocalDB fixture（一次建库、多测复用），并能创建：
-        
-        - identity 表
-            
-        - FK 依赖表
-            
-        - 1 个“缺表”场景
+- 测试面只聚焦：dependency planner、schema facade、preflight gate、orchestrator 生命周期。YAML 单测不重复。
