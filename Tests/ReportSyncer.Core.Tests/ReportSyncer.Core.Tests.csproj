@@ -41,11 +41,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Ensure YAML test files are copied to the test output so tests can read them by path -->
     <None Include="TestFiles\**\*.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <!-- Ensure YAML test files are copied to the test output so tests can read them by path -->
     <None Include="TestFiles\**\*.yml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

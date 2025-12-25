@@ -206,7 +206,7 @@ public static class ConfigurationTestData
     {
         var cfg = CreateMinimalValidConfig();
         // _connections is the private readonly backing field for Connections
-        SetPrivateField(cfg, "_connections", System.Array.Empty<ConnectionConfig>());
+        SetPrivateField(cfg, "_connections", Array.Empty<ConnectionConfig>());
         return cfg;
     }
 
@@ -217,7 +217,7 @@ public static class ConfigurationTestData
     {
         var cfg = CreateMinimalValidConfig();
         // _syncJobs is the private readonly backing field for SyncJobs
-        SetPrivateField(cfg, "_syncJobs", System.Array.Empty<SyncJobConfig>());
+        SetPrivateField(cfg, "_syncJobs", Array.Empty<SyncJobConfig>());
         return cfg;
     }
 

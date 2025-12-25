@@ -91,7 +91,9 @@ namespace ReportSyncer.Core.Configuration
                 var dto = await DeserializeRootDtoAsync(yamlText, ct).ConfigureAwait(false);
                 return MapToDomain(dto);
             }
-            catch (ConfigurationException)
+            catch (Exception ex) when (ex is ConfigurationException
+                                       || ex is FileNotFoundException
+                                       || ex is IOException)
             {
                 throw;
             }

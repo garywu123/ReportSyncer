@@ -21,7 +21,7 @@ public static class ConfigurationYamlTestHelper
     private static async Task<SyncConfiguration> LoadFromYamlFileAsync(string relativePath, CancellationToken ct = default)
     {
         var baseDir = AppContext.BaseDirectory ?? Directory.GetCurrentDirectory();
-        var path = Path.Combine(baseDir, "Configuration", "TestFiles", relativePath);
+        var path = Path.Combine(baseDir, "TestFiles", relativePath);
         if (!File.Exists(path))
             throw new FileNotFoundException($"Test YAML not found: {path}", path);
 

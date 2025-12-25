@@ -24,7 +24,7 @@ public class YamlConfigurationLoaderUnitTests
     {
         var cfg = ConfigurationYamlTestHelper.LoadFromYamlFile("sync_valid_full.yaml");
         Assert.NotNull(cfg);
-        Assert.Equal("1.1", cfg.Version);
+        Assert.Equal("1.2", cfg.Version);
         Assert.NotEmpty(cfg.Connections);
         Assert.True(cfg.SyncJobs.Count >= 1);
     }
