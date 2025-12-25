@@ -37,8 +37,7 @@ namespace ReportSyncer.Core.Configuration
         /// </exception>
         public KeyConfig(IEnumerable<string> businessKey)
         {
-            if (businessKey == null)
-                throw new ArgumentNullException(nameof(businessKey));
+            ArgumentNullException.ThrowIfNull(businessKey);
 
             _businessKey = businessKey.ToArray();
 

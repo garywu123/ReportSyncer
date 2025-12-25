@@ -75,12 +75,10 @@ namespace ReportSyncer.Core.Configuration
             EnvironmentType environment,
             ConnectionType type)
         {
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
+            ArgumentNullException.ThrowIfNull(name);
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Connection name cannot be empty or whitespace.", nameof(name));
-            if (connectionString == null)
-                throw new ArgumentNullException(nameof(connectionString));
+            ArgumentNullException.ThrowIfNull(connectionString);
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new ArgumentException("Connection string cannot be empty or whitespace.", nameof(connectionString));
 

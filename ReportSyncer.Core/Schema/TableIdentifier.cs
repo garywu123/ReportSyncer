@@ -40,27 +40,27 @@ namespace ReportSyncer.Core.Schema
             }
         }
 
-            /// <summary>
-            /// Parses a table identifier from a string of the form "schema.table" or "table".
-            /// When schema is omitted the default schema "dbo" is used.
-            /// </summary>
-            /// <param name="s">Input identifier string.</param>
-            /// <returns>Parsed <see cref="TableIdentifier"/>.</returns>
-            /// <exception cref="ArgumentException">When the input is null/empty or not a valid identifier.</exception>
-            public static TableIdentifier Parse(string s)
+        /// <summary>
+        /// Parses a table identifier from a string of the form "schema.table" or "table".
+        /// When schema is omitted the default schema "dbo" is used.
+        /// </summary>
+        /// <param name="s">Input identifier string.</param>
+        /// <returns>Parsed <see cref="TableIdentifier"/>.</returns>
+        /// <exception cref="ArgumentException">When the input is null/empty or not a valid identifier.</exception>
+        public static TableIdentifier Parse(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) throw new ArgumentException("Table identifier must be provided", nameof(s));
+            var parts = s.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 1)
             {
-                if (string.IsNullOrWhiteSpace(s)) throw new ArgumentException("Table identifier must be provided", nameof(s));
-                var parts = s.Split('.', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length == 1)
-                {
-                    return new TableIdentifier("dbo", parts[0]);
-                }
-                if (parts.Length == 2)
-                {
-                    return new TableIdentifier(parts[0], parts[1]);
-                }
-                throw new ArgumentException($"Invalid table identifier: {s}", nameof(s));
+                return new TableIdentifier("dbo", parts[0]);
             }
+            if (parts.Length == 2)
+            {
+                return new TableIdentifier(parts[0], parts[1]);
+            }
+            throw new ArgumentException($"Invalid table identifier: {s}", nameof(s));
+        }
     }
 }
 

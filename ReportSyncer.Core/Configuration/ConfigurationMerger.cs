@@ -27,7 +27,7 @@ namespace ReportSyncer.Core.Configuration
             SyncConfiguration baseConfig,
             RuntimeOverrides? overrides)
         {
-            if (baseConfig == null) throw new ArgumentNullException(nameof(baseConfig));
+            ArgumentNullException.ThrowIfNull(baseConfig);
 
             if (overrides == null || overrides.IsEmpty())
             {

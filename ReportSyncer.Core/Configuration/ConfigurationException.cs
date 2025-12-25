@@ -62,8 +62,7 @@ namespace ReportSyncer.Core.Configuration
         public ConfigurationException(IEnumerable<ConfigurationError> errors)
             : base(BuildMessage(errors))
         {
-            if (errors == null)
-                throw new ArgumentNullException(nameof(errors));
+            ArgumentNullException.ThrowIfNull(errors);
 
             var errorList = errors.ToList();
             if (errorList.Count == 0)

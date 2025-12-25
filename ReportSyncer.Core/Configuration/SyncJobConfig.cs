@@ -9,7 +9,6 @@
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>
-    /// <summary>
     /// Configuration for a sync job.
     /// </summary>
     public class SyncJobConfig
@@ -52,27 +51,6 @@ namespace ReportSyncer.Core.Configuration
         /// <summary>
         /// Initializes a new instance of the <see cref="SyncJobConfig"/> class.
         /// </summary>
-        /// <param name="name">
-        /// The unique name for this sync job. Must not be null or empty.
-        /// </param>
-        /// <param name="description">
-        /// Optional description of the job's purpose or behavior.
-        /// </param>
-        /// <param name="sourceConnection">
-        /// The name of the source connection. Must not be null or empty.
-        /// Must reference a connection defined in the configuration.
-        /// </param>
-        /// <param name="targetConnection">
-        /// The name of the target connection. Must not be null or empty.
-        /// Must reference a connection defined in the configuration.
-        /// </param>
-        /// <param name="parameters">
-        /// Dictionary of parameters used for filter resolution and context injection.
-        /// Can be empty but not null.
-        /// </param>
-        /// <param name="tables">
-        /// The list of table tasks to execute. Must contain at least one table task.
-        /// </param>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="name"/>, <paramref name="sourceConnection"/>,
         /// <paramref name="targetConnection"/>, <paramref name="parameters"/>, or
@@ -91,22 +69,17 @@ namespace ReportSyncer.Core.Configuration
             IDictionary<string, string> parameters,
             IEnumerable<TableTaskConfig> tables)
         {
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
+            ArgumentNullException.ThrowIfNull(name);
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Job name cannot be empty or whitespace.", nameof(name));
-            if (sourceConnection == null)
-                throw new ArgumentNullException(nameof(sourceConnection));
+            ArgumentNullException.ThrowIfNull(sourceConnection);
             if (string.IsNullOrWhiteSpace(sourceConnection))
                 throw new ArgumentException("Source connection name cannot be empty or whitespace.", nameof(sourceConnection));
-            if (targetConnection == null)
-                throw new ArgumentNullException(nameof(targetConnection));
+            ArgumentNullException.ThrowIfNull(targetConnection);
             if (string.IsNullOrWhiteSpace(targetConnection))
                 throw new ArgumentException("Target connection name cannot be empty or whitespace.", nameof(targetConnection));
-            if (parameters == null)
-                throw new ArgumentNullException(nameof(parameters));
-            if (tables == null)
-                throw new ArgumentNullException(nameof(tables));
+            ArgumentNullException.ThrowIfNull(parameters);
+            ArgumentNullException.ThrowIfNull(tables);
 
             _tables = tables.ToArray();
             if (_tables.Length == 0)

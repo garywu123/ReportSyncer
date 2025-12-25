@@ -208,12 +208,10 @@ namespace ReportSyncer.Core.Configuration
             KeyConfig? keys = null,
             SyncOptionsConfig? syncOptions = null)
         {
-            if (source == null)
-                throw new ArgumentNullException(nameof(source));
+            ArgumentNullException.ThrowIfNull(source);
             if (string.IsNullOrWhiteSpace(source))
                 throw new ArgumentException("Source table name cannot be empty or whitespace.", nameof(source));
-            if (target == null)
-                throw new ArgumentNullException(nameof(target));
+            ArgumentNullException.ThrowIfNull(target);
             if (string.IsNullOrWhiteSpace(target))
                 throw new ArgumentException("Target table name cannot be empty or whitespace.", nameof(target));
 

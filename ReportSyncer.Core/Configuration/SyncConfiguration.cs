@@ -64,7 +64,7 @@ public class SyncConfiguration
                              IEnumerable<ConnectionConfig> connections,
                              IEnumerable<SyncJobConfig>    syncJobs)
     {
-        if (version is null) throw new ArgumentNullException(nameof(version));
+        ArgumentNullException.ThrowIfNull(version);
         Version = version ?? throw new ArgumentNullException(nameof(version));
 
         Run = run                   ?? throw new ArgumentNullException(nameof(run));
@@ -75,8 +75,8 @@ public class SyncConfiguration
                 "Configuration version cannot be empty or whitespace.", nameof(version)
             );
 
-        if (connections is null) throw new ArgumentNullException(nameof(connections));
-        if (syncJobs is null) throw new ArgumentNullException(nameof(syncJobs));
+        ArgumentNullException.ThrowIfNull(connections);
+        ArgumentNullException.ThrowIfNull(syncJobs);
 
         _connections = connections.ToArray();
         if (_connections.Length == 0)

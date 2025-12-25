@@ -4,8 +4,6 @@
 // Date: 2025-12-25
 
 using DotNetToolkit.General;
-using System.Collections.Generic;
-using ReportSyncer.Core.Schema;
 
 namespace ReportSyncer.Core.Schema.Dependency;
 

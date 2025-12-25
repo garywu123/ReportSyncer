@@ -18,8 +18,7 @@ internal sealed class ConfigurationValidator : IConfigurationValidator
     /// </summary>
     public void Validate(SyncConfiguration configuration)
     {
-        if (configuration == null)
-            throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
 
         var errors = new List<ConfigurationError>();
 
