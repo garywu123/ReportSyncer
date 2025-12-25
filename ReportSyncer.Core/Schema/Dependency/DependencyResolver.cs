@@ -3,11 +3,7 @@
 // Project: ReportSyncer
 // Date: 2025-12-25
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using DotNetToolkit.General;
-using ReportSyncer.Core.Schema;
 
 namespace ReportSyncer.Core.Schema.Dependency;
 
@@ -16,6 +12,19 @@ namespace ReportSyncer.Core.Schema.Dependency;
 /// </summary>
 public sealed class DependencyResolver : IDependencyResolver
 {
+    /// <summary>
+    /// Build an <see cref="ExecutionPlan"/> for the provided <paramref name="selectedTargetTables"/> against
+    /// the <paramref name="targetSnapshot"/>. Performs validation that all selected tables exist and that
+    /// parent tables referenced by foreign keys are also selected. Uses a topological sort to derive a
+    /// safe insert order; the delete order is the reverse of the insert order.
+    /// </summary>
+    /// <param name="targetSnapshot">The inspected target schema snapshot.</param>
+    /// <param name="selectedTargetTables">The list of tables selected for the job (may be empty).</param>
+    /// <returns>
+    /// A <see cref="Result{ExecutionPlan}"/> containing the computed <see cref="ExecutionPlan"/> on success,
+    /// or a failure result with an error message when validation or cycle detection fails.
+    /// If <paramref name="selectedTargetTables"/> is empty the returned plan will be <see cref="ExecutionPlan.Empty"/>.
+    /// </returns>
     public Result<ExecutionPlan> BuildExecutionPlan(
         SchemaSnapshot targetSnapshot,
         IReadOnlyList<TableIdentifier> selectedTargetTables)
@@ -29,7 +38,7 @@ public sealed class DependencyResolver : IDependencyResolver
         }
 
         var selectedSet = new HashSet<TableIdentifier>(selectedTargetTables);
-
+        // adjList 代表有向图的邻接表
         var adjList = new Dictionary<TableIdentifier, List<TableIdentifier>>();
         var errors = new List<DependencyValidationError>();
 
@@ -45,6 +54,7 @@ public sealed class DependencyResolver : IDependencyResolver
                 adjList[table] = new List<TableIdentifier>();
             }
 
+            // 遍历每个表的外键依赖
             foreach (var fk in tableSchema.ForeignKeys)
             {
                 var parent = fk.ToTable;
@@ -77,6 +87,16 @@ public sealed class DependencyResolver : IDependencyResolver
         return Result<ExecutionPlan>.Ok(new ExecutionPlan(insertOrder, deleteOrder));
     }
 
+    /// <summary>
+    /// Perform a topological sort of the dependency graph represented by <paramref name="adjList"/>.
+    /// The returned list is in dependency order such that parents appear before dependent children.
+    /// </summary>
+    /// <param name="adjList">Adjacency list mapping a node to its dependencies (edges point to parents).</param>
+    /// <param name="allNodes">All nodes that must appear in the result (selected tables).</param>
+    /// <returns>
+    /// A <see cref="Result{T}"/> containing the ordered node list on success, or a failure with an
+    /// explanatory error (e.g. cycle detected) on failure.
+    /// </returns>
     private Result<IReadOnlyList<TableIdentifier>> TopologicalSort(
         Dictionary<TableIdentifier, List<TableIdentifier>> adjList,
         HashSet<TableIdentifier> allNodes)
@@ -100,6 +120,19 @@ public sealed class DependencyResolver : IDependencyResolver
         return Result<IReadOnlyList<TableIdentifier>>.Ok(result);
     }
 
+    /// <summary>
+    /// Depth-first visitation helper used by <see cref="TopologicalSort"/>.
+    /// Detects cycles and appends nodes to <paramref name="result"/> in post-order.
+    /// </summary>
+    /// <param name="node">The current node to visit.</param>
+    /// <param name="adjList">Adjacency list of dependencies.</param>
+    /// <param name="visited">Set of nodes already fully visited.</param>
+    /// <param name="visiting">Set of nodes currently on the recursion stack (for cycle detection).</param>
+    /// <param name="result">Accumulator for the topologically sorted nodes (post-order).</param>
+    /// <returns>
+    /// A <see cref="Result{bool}"/> indicating success, or failure with an error message when a cycle
+    /// is detected or a recursive visit fails.
+    /// </returns>
     private Result<bool> Visit(
         TableIdentifier node,
         Dictionary<TableIdentifier, List<TableIdentifier>> adjList,
@@ -110,7 +143,7 @@ public sealed class DependencyResolver : IDependencyResolver
         if (visiting.Contains(node))
         {
             // build cycle path for nicer message
-            var cycle = visiting.Concat(new[] { node }).ToList();
+            var cycle = visiting.Concat([node]).ToList();
             var err = DependencyValidationError.Cycle(cycle);
             return Result<bool>.Fail(err.Message);
         }
