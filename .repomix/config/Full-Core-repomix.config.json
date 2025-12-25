@@ -13,7 +13,7 @@
     "showLineNumbers": false,
     "copyToClipboard": false,
     "includeEmptyDirectories": false,
-    "compress": true
+    "compress": false
   },
   "include": [],
   "ignore": {
