@@ -17,16 +17,10 @@ namespace ReportSyncer.Core.Sync;
 /// <summary>
 /// Coordinates schema analysis and translates failures into domain exceptions.
 /// </summary>
-public sealed class PreFlightValidator : IPreFlightValidator
+public sealed class PreFlightValidator(ISchemaService schemaService, ILogService log) : IPreFlightValidator
 {
-    private readonly ISchemaService _schemaService;
-    private readonly ILogService _log;
-
-    public PreFlightValidator(ISchemaService schemaService, ILogService log)
-    {
-        _schemaService = schemaService ?? throw new ArgumentNullException(nameof(schemaService));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
-    }
+    private readonly ISchemaService _schemaService = schemaService ?? throw new ArgumentNullException(nameof(schemaService));
+    private readonly ILogService _log = log ?? throw new ArgumentNullException(nameof(log));
 
     public async Task<PreFlightResult> ValidateAsync(
         SyncConfiguration effectiveConfig,
