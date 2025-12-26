@@ -17,11 +17,23 @@ namespace ReportSyncer.Core.Sync;
 /// <summary>
 /// Coordinates schema analysis and translates failures into domain exceptions.
 /// </summary>
+/// <param name="schemaService">The schema analysis service used to inspect source and target schemas.</param>
+/// <param name="log">The logging service used for informational and error messages.</param>
 public sealed class PreFlightValidator(ISchemaService schemaService, ILogService log) : IPreFlightValidator
 {
     private readonly ISchemaService _schemaService = schemaService ?? throw new ArgumentNullException(nameof(schemaService));
     private readonly ILogService _log = log ?? throw new ArgumentNullException(nameof(log));
 
+    /// <summary>
+    /// Executes pre-flight validation for the supplied <paramref name="job"/> against the
+    /// provided <paramref name="effectiveConfig"/>. If schema analysis indicates incompatibilities
+    /// a <see cref="SchemaMismatchException"/> is thrown.
+    /// </summary>
+    /// <param name="effectiveConfig">The effective runtime configuration to validate against.</param>
+    /// <param name="job">The job configuration to validate.</param>
+    /// <param name="ct">A <see cref="CancellationToken"/> used to cancel the validation.</param>
+    /// <returns>A <see cref="PreFlightResult"/> containing the pre-flight outcome.</returns>
+    /// <exception cref="SchemaMismatchException">Thrown when schema analysis reports incompatibilities.</exception>
     public async Task<PreFlightResult> ValidateAsync(
         SyncConfiguration effectiveConfig,
         SyncJobConfig job,

@@ -25,7 +25,11 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
 {
     private readonly IConfigurationProvider _configurationProvider;
     private readonly IPreFlightValidator _preFlightValidator;
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SyncOrchestrator"/> class.
+    /// </summary>
+    /// <param name="configurationProvider">Provides configuration loading and validation.</param>
+    /// <param name="preFlightValidator">Validates jobs before execution.</param>
     public SyncOrchestrator(
         IConfigurationProvider configurationProvider,
         IPreFlightValidator preFlightValidator)
@@ -34,6 +38,20 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
         _preFlightValidator = preFlightValidator ?? throw new ArgumentNullException(nameof(preFlightValidator));
     }
 
+    /// <summary>
+    /// Runs the named job using configuration loaded from <paramref name="configPath"/>.
+    /// This method performs configuration loading and validation, resolves the job,
+    /// runs pre-flight validation and either returns a dry-run result or invokes the
+    /// execution engine (not implemented in this component).
+    /// </summary>
+    /// <param name="configPath">Path to the configuration file.</param>
+    /// <param name="jobName">The name of the job to execute (case-insensitive).</param>
+    /// <param name="overrides">Optional runtime overrides applied when loading configuration.</param>
+    /// <param name="ct">A <see cref="CancellationToken"/> used to cancel the operation.</param>
+    /// <returns>A <see cref="JobResult"/> describing the outcome of the job run.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="configPath"/> or <paramref name="jobName"/> is invalid.</exception>
+    /// <exception cref="ConfigurationException">Thrown when the named job cannot be found in configuration.</exception>
+    /// <exception cref="SyncExecutionException">Thrown when execution fails or is not implemented.</exception>
     public async Task<JobResult> RunJobAsync(
         string configPath,
         string jobName,
