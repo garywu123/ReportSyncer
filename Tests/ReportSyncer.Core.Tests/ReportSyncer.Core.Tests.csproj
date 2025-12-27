@@ -51,10 +51,14 @@
     <None Include="IntegrationTests\Schema\SchemaSeed.sql">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="IntegrationTests\Sql\QueryBuilderSeed.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="IntegrationTests\Schema\" />
+    <Folder Include="IntegrationTests\Sql\" />
   </ItemGroup>
 
 </Project>
