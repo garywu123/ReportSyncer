@@ -15,12 +15,18 @@ using ReportSyncer.Core.Sync.Contracts;
 namespace ReportSyncer.Core.Sync.Sql;
 
 /// <summary>
-/// Builds SQL Server command specifications for sync operations.
+/// SQL Server implementation of <see cref="ISqlQueryBuilder"/>.
+/// Produces platform-specific SQL command text and parameter specifications for sync operations.
 /// </summary>
 public sealed class SqlServerQueryBuilder : ISqlQueryBuilder
 {
     private readonly WhereClauseBuilder _whereClauseBuilder = new();
 
+    /// <summary>
+    /// Builds a <c>SELECT COUNT(1)</c> command for the provided table execution context.
+    /// </summary>
+    /// <param name="ctx">Table execution context containing target schema/table and optional filters.</param>
+    /// <returns>A <see cref="DbCommandSpec"/> that returns the count when executed.</returns>
     public DbCommandSpec BuildCountEstimate(TableExecutionContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
@@ -37,6 +43,12 @@ public sealed class SqlServerQueryBuilder : ISqlQueryBuilder
         return new DbCommandSpec(sql, parameters);
     }
 
+    /// <summary>
+    /// Builds a DELETE statement for the target table using the provided filters.
+    /// </summary>
+    /// <param name="ctx">Delete command context containing target table and filter predicates.</param>
+    /// <returns>A <see cref="DbCommandSpec"/> representing the DELETE statement and parameters.</returns>
+    /// <exception cref="ConfigurationException">If no filters are provided in <paramref name="ctx"/>.</exception>
     public DbCommandSpec BuildDelete(DeleteCommandContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
@@ -51,6 +63,11 @@ public sealed class SqlServerQueryBuilder : ISqlQueryBuilder
         return new DbCommandSpec(sql, parameters);
     }
 
+    /// <summary>
+    /// Builds a SELECT statement to read source rows to be inserted into the target.
+    /// </summary>
+    /// <param name="ctx">Insert command context describing source table, mapping and filters.</param>
+    /// <returns>A <see cref="DbCommandSpec"/> that selects the required source columns.</returns>
     public DbCommandSpec BuildSelectSource(InsertCommandContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
@@ -70,6 +87,11 @@ public sealed class SqlServerQueryBuilder : ISqlQueryBuilder
         return new DbCommandSpec(sql, parameters);
     }
 
+    /// <summary>
+    /// Builds an INSERT statement for the target table using the provided mapping and context values.
+    /// </summary>
+    /// <param name="ctx">Insert command context describing the target, mapping and optional context column.</param>
+    /// <returns>A <see cref="DbCommandSpec"/> representing the INSERT statement and its parameters.</returns>
     public DbCommandSpec BuildInsertTarget(InsertCommandContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
@@ -117,6 +139,11 @@ public sealed class SqlServerQueryBuilder : ISqlQueryBuilder
         return new DbCommandSpec(sql, parameters.AsReadOnly());
     }
 
+    /// <summary>
+    /// Returns the source column names for one-to-one mappings from the provided <see cref="TableMapping"/>.
+    /// </summary>
+    /// <param name="mapping">The table mapping to inspect.</param>
+    /// <returns>List of source column names used in the SELECT list.</returns>
     private static IReadOnlyList<string> GetSourceColumns(TableMapping mapping)
     {
         ArgumentNullException.ThrowIfNull(mapping);
@@ -127,6 +154,11 @@ public sealed class SqlServerQueryBuilder : ISqlQueryBuilder
             .ToArray();
     }
 
+    /// <summary>
+    /// Returns the target column names for mappings that are not ignored.
+    /// </summary>
+    /// <param name="mapping">The table mapping to inspect.</param>
+    /// <returns>List of target column names for the INSERT statement.</returns>
     private static IReadOnlyList<string> GetTargetColumns(TableMapping mapping)
     {
         ArgumentNullException.ThrowIfNull(mapping);

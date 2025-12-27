@@ -12,8 +12,20 @@ using ReportSyncer.Core.Sync.Contracts;
 
 namespace ReportSyncer.Core.Sync.Sql;
 
+/// <summary>
+/// Builds WHERE clause SQL fragments and parameters from a collection of filter predicates.
+/// </summary>
 internal sealed class WhereClauseBuilder
 {
+    /// <summary>
+    /// Builds the SQL fragment and ordered parameters for the provided filters.
+    /// </summary>
+    /// <param name="filters">The list of filter predicates to convert into SQL.</param>
+    /// <returns>
+    /// A tuple containing the SQL fragment (including the leading <c>WHERE</c> keyword) and
+    /// the associated parameter specifications in execution order.
+    /// </returns>
+    /// <exception cref="ArgumentException">If <paramref name="filters"/> contains null entries.</exception>
     public (string Sql, IReadOnlyList<CommandParameterSpec> Parameters) Build(
         IReadOnlyList<FilterPredicate> filters)
     {
