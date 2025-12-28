@@ -158,13 +158,9 @@ These scenarios represent the "Source of Truth" for system behavior.
 ### Scenario: Safety Check – Unscoped Delete Block
 
 - **Given** a job is configured to wipe the target (`preSyncTargetAction=true`) but has **no filters** defined.
-    
 - **And** the safety flag `allowAllDelete` is set to `false` (default).
-    
 - **When** the user attempts to run the job.
-    
 - **Then** the system **blocks execution** during Pre-flight.
-    
 - **And** returns a strict validation error: "Full table delete prevented by safety rules."
     
 
@@ -191,6 +187,10 @@ These scenarios represent the "Source of Truth" for system behavior.
   - Ensure execution always follows this dependency-based order, regardless of whether the user explicitly pressed any "Sort" button in the UI.
   - Optionally update the visible table list to reflect the final execution order before starting the sync.
 
+### Scenario: Bypassing Table Dependencies
+
+- **Description**: When a `TableTask` is explicitly configured with `ignoreDependencies: true`, Pre-Flight validation should pass even if its referenced parent tables are not selected for the job.
+- **Note**: Explicitly state that if the target database has active foreign key constraints, a SQL exception may still occur during the execution phase.
 
 ## 5. User Interface (UX) Expectations
 
@@ -199,46 +199,32 @@ The user interacts with the system via a Desktop UI.
 ### 5.1 Dashboard
 
 - **Landing View:** Displays a summary of available Sync Jobs and Connection statuses.
-    
 - **Actions:** Users can select a job to "Run" or "Dry Run."
-    
 - **Feedback:** Indicators show if connections are online/offline.
     
-
 ### 5.2 Configuration Editor
 
 - **Goal:** Manage the YAML-based configuration without editing text files manually.
-    
 - **Connection Management:** Form-based entry for:
-    
     - Connection String.
-        
     - Environment Tag (Prod/Dev).
-        
     - **Database Type** (Application/Reporting).
         
 - **Job Definition:** Visual editor to map Source Table $\rightarrow$ Target Table.
-    
     - **Context Column Setting:** Field to define the context column name (default `CustomerId`).
         
 - **Safety Toggles:** Checkboxes for high-impact settings (`preSyncTargetAction`, `allowAllDelete`).
-    
 - **Validation:** The UI must validate unique names and required fields before saving.
     
-
 ### 5.3 Run Console (Job Runner)
 
 - **Real-Time Progress:** Overall Job Progress bar, Per-Table status, Throughput metrics (Rows/sec), and ETA.
-    
 - **Live Logs:** A scrolling terminal-like view showing significant events.
-    
 - **Controls:** Cancel Button (Immediate), Dry Run Toggle.
     
-
 ### 5.4 History View
 
 - **Audit Trail:** A searchable list of past runs (Timestamp, Duration, Rows Transferred, Outcome).
-    
 - **Error Reporting:** Detailed error messages for failed runs.
     
 
@@ -247,32 +233,21 @@ The user interacts with the system via a Desktop UI.
 The system behavior is driven by a configuration file (YAML format). The logical entities are:
 
 1. **Run Config:** Global settings (Batch sizes, Dry-run defaults).
-    
 2. **Schema Policy:** Rules for handling schema drift.
-    
 3. **Safety Config:** Global thresholds (e.g., `confirmLargeDeletePct`).
-    
 4. **Connections:** - `Name`
-    
     - `ConnectionString`
-        
     - `Environment` (Prod, Dev, etc.)
-        
     - **`Type`** (Application, Reporting) - _Used to determine context injection logic._
         
 5. **Sync Jobs:** Groupings of tasks.
-    
     - **Context Configuration:**
-        
         - `ContextColumnName` (String, Default: "CustomerId") - _The name of the column to inject/filter by._
-            
     - **Table Task:** A single unit of work (Source Table $\rightarrow$ Target Table).
-        
-        - **Filter:** Optional logic to slice data.
-            
-        - **Mapping:** Column matching rules.
-            
-        - **Actions:** `preSyncTargetAction`, `enableIdentityInsert`.
+        - **`Filter`:** Optional logic to slice data.
+        - `ignoreDependencies` (Boolean, Default: `false`) - Controls whether to ignore foreign key relationships for this table during dependency planning.
+        - **`Mapping`:** Column matching rules.
+        - **`Actions`:** `preSyncTargetAction`, `enableIdentityInsert`.
             
 
 ## 7. Glossary

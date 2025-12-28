@@ -52,11 +52,12 @@ Allowed references (project → may reference):
     → DotNetToolkit.Logging
     → DotNetToolkit.Database   (for host-level concerns only, never business rules)
 
-  ReportSyncer.Tests
+  ReportSyncer.Core.Tests
     → ReportSyncer.Core
-    → ReportSyncer.Console
-    → ReportSyncer.WebApi
-    → DotNetToolkit.*
+
+  ReportSyncer.Wpf.Tests
+    → ReportSyncer.Core
+    -> ReportSyncer.Wpf
 
 Forbidden references:
 
@@ -153,6 +154,7 @@ If you are handling process lifetime, HTTP context, command-line arguments, or U
     
 Anything that looks like “real work” on data belongs in `ReportSyncer.Core`; `ReportSyncer.Console` is wiring, not logic.
 
+
 ---
 
 #### 3.3 `ReportSyncer.WebApi` (HTTP host)
@@ -199,44 +201,39 @@ Controllers may **only** orchestrate calls into `ReportSyncer.Core` and shape HT
 
 ---
 
-#### 3.4 `ReportSyncer.Tests` (test project)
+#### 3.4 `ReportSyncer.Core.Tests` (test project)
 
 **Contains (must):**
-
 - Unit tests for:
-    
     - Configuration loader & validator.
-        
     - Schema comparison & dependency resolver.
-        
     - Safety validator & permissions profiling.
-        
     - Sync orchestrator (using mocks), pre-flight validator, data writer SQL generation, progress tracker.
         
 - Integration tests:
-    
     - DB-backed tests using LocalDB or equivalent seeded databases for:
-        
         - Schema inspection.
-            
         - FK ordering.
-            
         - Delete/insert behavior (batching, chunking, identity insert).
-            
-- API tests (optional but allowed):
-    
-    - Tests for `ReportSyncer.WebApi` endpoints using in-memory server or test host.
-        
 
 **Must not contain:**
-
 - Production code or shared helper logic that should live in `ReportSyncer.Core` or `DotNetToolkit.*`.
-    
 - Standalone executables or hosts.
-    
 
 Any test-only helpers must stay inside `ReportSyncer.Tests` unless they are clearly reusable, in which case they must be promoted to an appropriate toolkit project with no ReportSyncer dependency.
 
+---
+
+#### 3.5. `ReportSyncer.Wpf`
+
+- **包含 (Must)：**
+    - **MVVM 架构：** 所有的 UI 逻辑必须在 ViewModel 中，View 仅负责 XAML 绑定。
+    - **DI Composition Root：** 在 `App.xaml.cs` 中配置整个解决方案的注入逻辑。
+    - **UI 线程管理：** 负责使用 `Dispatcher` 将后台进度安全地更新到界面。
+        
+- **不包含 (Must Not)：**
+    - **业务逻辑：** 不得在 ViewModel 中直接编写 SQL 或执行 Schema 映射，必须调用 `ReportSyncer.Core`。
+    - 
 ---
 
 #### 3.5 `DotNetToolkit.General` (general utilities)
@@ -590,15 +587,16 @@ A sync run is modeled as a pipeline coordinated by `ISyncOrchestrator`:
             - The resolver builds the dependency graph and execution order **only** over this subset, not the entire Target database.
 
 	- If any participating Target table has a foreign key to another Target table that is **not part of this participating set**:
-		- The resolver must treat this as a **fatal schema/configuration error**.
-		- A `SchemaMismatchException` (or a dedicated dependency error type) must be raised, including:
-			- The selected table(s) with the invalid dependency.
-			- The missing Target table(s) that are required but not in the job.
-
-        - Hosts (Console/WebApi) must:
-            - Surface this as a blocking **pre-flight** error to the user.
-            - **Not** auto-add missing tables into the job.
-            - **Not** silently drop the dependent tables from execution.
+		- Iterate through selected tables; if `table.ignoreDependencies` is `false`, add its foreign keys to the graph; if `true`, skip the foreign key links for that specific table.
+		- If the table does not have `ignoreDependencies == true`, then
+			- The resolver must treat this as a **fatal schema/configuration error**.
+			- A `SchemaMismatchException` (or a dedicated dependency error type) must be raised, including:
+				- The selected table(s) with the invalid dependency.
+				- The missing Target table(s) that are required but not in the job.
+	        - Hosts (Console/WebApi) must:
+	            - Surface this as a blocking **pre-flight** error to the user.
+	            - **Not** auto-add missing tables into the job.
+	            - **Not** silently drop the dependent tables from execution.
 
 
 5. **Table Selection, Dependency Validation & Auto-Ordering**
@@ -762,46 +760,56 @@ A separate “Test Surfaces & Seams” section will expand this into a test matr
 
 #### `ReportSyncer.Core.Configuration`
 
-|Namespace|Type|Name|Responsibility|Depends on|Related Tasks|
-|---|---|---|---|---|---|
-|ReportSyncer.Core.Configuration|Class|SyncConfiguration|Root configuration model representing the YAML config: run settings, safety, schema policy, connections, and sync jobs. Key properties mirror Minimal Doc (`RunConfig`, `SchemaPolicyConfig`, `SafetyConfig`, `ConnectionConfig[]`, `SyncJobConfig[]`). Throws `ConfigurationException` only when constructed/validated programmatically.|–|Task 10|
-|ReportSyncer.Core.Configuration|Class|RunConfig|Represents global runtime settings (`dryRun`, `defaultBatchSize`, `deleteChunkSize`, `etaSmoothing`, `useTvpIfAvailable`). Used read-only by orchestrator, data writer, and progress estimation. No behavior besides basic validation. Throws `ConfigurationException` from validator only.|–|Task 10, 40, 50, 60|
-|ReportSyncer.Core.Configuration|Class|SchemaPolicyConfig|Represents schema policy (`onMismatch`, `requirePrimaryKey`, `allowExtraTargetColumns`). Consumed by `SchemaMapper` / `SchemaPolicyEvaluator`. Throws `ConfigurationException` on invalid combinations (e.g. unknown `onMismatch`).|–|Task 10, 20|
-|ReportSyncer.Core.Configuration|Class|SafetyConfig|Represents global guardrails (`requireDifferentConnections`, `forbidProdToProd`, `confirmLargeDeletePct`). Evaluated by `SafetyValidator`. Throws `ConfigurationException` for invalid ranges (e.g. confirmLargeDeletePct not in [0,1]).|–|Task 10, 30|
-|ReportSyncer.Core.Configuration|Class|ConnectionConfig|Configuration for a named connection (`name`, `connectionString`, `environmentTag` or equivalent). Used by `INamedDbContextFactory` and safety checks. Throws `ConfigurationException` when missing required fields.|–|Task 10, 30, 40|
-|ReportSyncer.Core.Configuration|Class|SyncJobConfig|Represents a job (`name`, `description`, `sourceConnection`, `targetConnection`, `parameters`, `TableTaskConfig[]`). Used as the job definition by orchestrator. Validation catches missing connections, parameter issues. Throws `ConfigurationException`.|–|Task 10, 40|
-|ReportSyncer.Core.Configuration|Class|TableTaskConfig|Config for a single table sync (`source`, `target`, `enabled`, `preSyncTargetAction`, `allowAllDelete`, `enableIdentityInsert`, `filter`, `syncOptions`, `columnMapping`, `keys`, `typeCoercion`). Forms the core of per-table logic. Invalid combinations result in `ConfigurationException` or `SafetyViolationException` during validation.|–|Task 10, 20, 30, 40, 50|
-|ReportSyncer.Core.Configuration|Class|FilterConfig|Represents optional table filter (either null, key-based filter like `CustomerId`, or date range with `dateColumn`, `startDate`, `endDate`). Used by SQL builder and safety logic to detect scoped vs unscoped deletes. Throws `ConfigurationException` on invalid config.|–|Task 10, 20, 30, 50|
-|ReportSyncer.Core.Configuration|Class|SyncOptionsConfig|Per-table overrides (`batchSize`, `multiRowInsert`, table-level `useTvpIfAvailable` etc.). Read by data writer to tune batching strategy. Throws `ConfigurationException` if values are invalid.|–|Task 10, 50|
-|ReportSyncer.Core.Configuration|Class|ColumnMappingConfig|Defines mapping strategy (`automapByName`, explicit mappings, `AddedColumnMappingConfig[]` for injected constants/parameters). Used by `SchemaMapper` & SQL builder to produce final column list. Throws `ConfigurationException` on inconsistent mappings.|–|Task 10, 20, 50|
-|ReportSyncer.Core.Configuration|Class|AddedColumnMappingConfig|Represents a single added column (target column name + literal or parameter placeholder like `{CustomerId}`). Used by data writer to inject constant/parameter values. Throws `ConfigurationException` if value placeholder cannot be resolved.|–|Task 10, 50|
-|ReportSyncer.Core.Configuration|Class|KeyConfig|Config for keys (`businessKey[]`, `compositeKey[]`). Used to drive dedupe / no-op behavior (`INSERT ... WHERE NOT EXISTS`). Incorrect/empty configuration raises `ConfigurationException` or drives no-op logic.|–|Task 10, 20, 50|
-|ReportSyncer.Core.Configuration|Class|TypeCoercionConfig|Config for type coercion policy (`policy = fail|mapCompatible`). Delegated to` SchemaMapper`to enforce coercion rules. Throws`ConfigurationException` if unsupported policy.|–|
-|ReportSyncer.Core.Configuration|Interface|IConfigurationLoader|Loads `SyncConfiguration` from a source (file or stream). Key methods: `Task<SyncConfiguration> LoadAsync(string path, CancellationToken ct)`. Throws `ConfigurationException` on IO / parsing failures.|DotNetToolkit.General (file IO helpers), `DotNetToolkit.Logging.ILogService`|Task 10|
-|ReportSyncer.Core.Configuration|Class|YamlConfigurationLoader|Concrete loader using YamlDotNet (or equivalent) to read from YAML file into `SyncConfiguration`. Also resolves parameter placeholders where needed. Throws `ConfigurationException` for syntax errors / missing sections.|`IConfigurationLoader`, `ILogService`|Task 10|
-|ReportSyncer.Core.Configuration|Interface|IConfigurationValidator|Validates a `SyncConfiguration` against structural and business rules. Key methods: `void Validate(SyncConfiguration config)`. Throws `ConfigurationException` or `SafetyViolationException` for invalid guardrails (e.g. preSync + no filter + allowAllDelete=false).|–|Task 10, 30|
-|ReportSyncer.Core.Configuration|Class|ConfigurationValidator|Concrete validator implementing all rules from requirements: existing connections, unique names, safety preconditions, schema policy sanity, etc. Responsible for early, deterministic failure. Throws `ConfigurationException` / `SafetyViolationException` with clear messages.|`IConfigurationValidator`, `SafetyConfig`, `SafetyValidator` (optional reuse)|Task 10, 30|
-|ReportSyncer.Core.Configuration|Interface|IConfigurationProvider|High-level facade providing a validated config to callers. Key methods: `Task<SyncConfiguration> LoadAndValidateAsync(string path, CancellationToken ct)`. Throws `ConfigurationException` / `SafetyViolationException` only, hiding lower-level details.|`IConfigurationLoader`, `IConfigurationValidator`, `ILogService`|Task 10, 40|
+| Namespace                       | Type      | Name                     | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                 | Depends on                                                                                                                   | Related Tasks           |
+| ------------------------------- | --------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| ReportSyncer.Core.Configuration | Class     | SyncConfiguration        | Root configuration model representing the YAML config: run settings, safety, schema policy, connections, and sync jobs. Key properties mirror Minimal Doc (`RunConfig`, `SchemaPolicyConfig`, `SafetyConfig`, `ConnectionConfig[]`, `SyncJobConfig[]`). Throws `ConfigurationException` only when constructed/validated programmatically.                                                                                                      | –                                                                                                                            | Task 10                 |
+| ReportSyncer.Core.Configuration | Class     | RunConfig                | Represents global runtime settings (`dryRun`, `defaultBatchSize`, `deleteChunkSize`, `etaSmoothing`, `useTvpIfAvailable`). Used read-only by orchestrator, data writer, and progress estimation. No behavior besides basic validation. Throws `ConfigurationException` from validator only.                                                                                                                                                    | –                                                                                                                            | Task 10, 40, 50, 60     |
+| ReportSyncer.Core.Configuration | Class     | SchemaPolicyConfig       | Represents schema policy (`onMismatch`, `requirePrimaryKey`, `allowExtraTargetColumns`). Consumed by `SchemaMapper` / `SchemaPolicyEvaluator`. Throws `ConfigurationException` on invalid combinations (e.g. unknown `onMismatch`).                                                                                                                                                                                                            | –                                                                                                                            | Task 10, 20             |
+| ReportSyncer.Core.Configuration | Class     | SafetyConfig             | Represents global guardrails (`requireDifferentConnections`, `forbidProdToProd`, `confirmLargeDeletePct`). Evaluated by `SafetyValidator`. Throws `ConfigurationException` for invalid ranges (e.g. confirmLargeDeletePct not in [0,1]).                                                                                                                                                                                                       | –                                                                                                                            | Task 10, 30             |
+| ReportSyncer.Core.Configuration | Class     | ConnectionConfig         | Configuration for a named connection (`name`, `connectionString`, `environmentTag` or equivalent). Used by `INamedDbContextFactory` and safety checks. Throws `ConfigurationException` when missing required fields.                                                                                                                                                                                                                           | –                                                                                                                            | Task 10, 30, 40         |
+| ReportSyncer.Core.Configuration | Class     | SyncJobConfig            | Represents a job (`name`, `description`, `sourceConnection`, `targetConnection`, `parameters`, `TableTaskConfig[]`). Used as the job definition by orchestrator. Validation catches missing connections, parameter issues. Throws `ConfigurationException`.                                                                                                                                                                                    | –                                                                                                                            | Task 10, 40             |
+| ReportSyncer.Core.Configuration | Class     | TableTaskConfig          | Config for a single table sync (`source`, `target`, `enabled`, `preSyncTargetAction`, `allowAllDelete`, `enableIdentityInsert`, `filter`, `syncOptions`, `columnMapping`, `keys`, `typeCoercion`). Forms the core of per-table logic. Invalid combinations result in `ConfigurationException` or `SafetyViolationException` during validation.<br><br>Includes the `ignoreDependencies` flag to control the behavior of the dependency planner | –                                                                                                                            | Task 10, 20, 30, 40, 50 |
+| ReportSyncer.Core.Configuration | Class     | FilterConfig             | Represents optional table filter (either null, key-based filter like `CustomerId`, or date range with `dateColumn`, `startDate`, `endDate`). Used by SQL builder and safety logic to detect scoped vs unscoped deletes. Throws `ConfigurationException` on invalid config.                                                                                                                                                                     | –                                                                                                                            | Task 10, 20, 30, 50     |
+| ReportSyncer.Core.Configuration | Class     | SyncOptionsConfig        | Per-table overrides (`batchSize`, `multiRowInsert`, table-level `useTvpIfAvailable` etc.). Read by data writer to tune batching strategy. Throws `ConfigurationException` if values are invalid.                                                                                                                                                                                                                                               | –                                                                                                                            | Task 10, 50             |
+| ReportSyncer.Core.Configuration | Class     | ColumnMappingConfig      | Defines mapping strategy (`automapByName`, explicit mappings, `AddedColumnMappingConfig[]` for injected constants/parameters). Used by `SchemaMapper` & SQL builder to produce final column list. Throws `ConfigurationException` on inconsistent mappings.                                                                                                                                                                                    | –                                                                                                                            | Task 10, 20, 50         |
+| ReportSyncer.Core.Configuration | Class     | AddedColumnMappingConfig | Represents a single added column (target column name + literal or parameter placeholder like `{CustomerId}`). Used by data writer to inject constant/parameter values. Throws `ConfigurationException` if value placeholder cannot be resolved.                                                                                                                                                                                                | –                                                                                                                            | Task 10, 50             |
+| ReportSyncer.Core.Configuration | Class     | KeyConfig                | Config for keys (`businessKey[]`, `compositeKey[]`). Used to drive dedupe / no-op behavior (`INSERT ... WHERE NOT EXISTS`). Incorrect/empty configuration raises `ConfigurationException` or drives no-op logic.                                                                                                                                                                                                                               | –                                                                                                                            | Task 10, 20, 50         |
+| ReportSyncer.Core.Configuration | Class     | TypeCoercionConfig       | Config for type coercion policy (`policy = fail                                                                                                                                                                                                                                                                                                                                                                                                | mapCompatible`). Delegated to` SchemaMapper`to enforce coercion rules. Throws`ConfigurationException` if unsupported policy. | –                       |
+| ReportSyncer.Core.Configuration | Interface | IConfigurationLoader     | Loads `SyncConfiguration` from a source (file or stream). Key methods: `Task<SyncConfiguration> LoadAsync(string path, CancellationToken ct)`. Throws `ConfigurationException` on IO / parsing failures.                                                                                                                                                                                                                                       | DotNetToolkit.General (file IO helpers), `DotNetToolkit.Logging.ILogService`                                                 | Task 10                 |
+| ReportSyncer.Core.Configuration | Class     | YamlConfigurationLoader  | Concrete loader using YamlDotNet (or equivalent) to read from YAML file into `SyncConfiguration`. Also resolves parameter placeholders where needed. Throws `ConfigurationException` for syntax errors / missing sections.                                                                                                                                                                                                                     | `IConfigurationLoader`, `ILogService`                                                                                        | Task 10                 |
+| ReportSyncer.Core.Configuration | Interface | IConfigurationValidator  | Validates a `SyncConfiguration` against structural and business rules. Key methods: `void Validate(SyncConfiguration config)`. Throws `ConfigurationException` or `SafetyViolationException` for invalid guardrails (e.g. preSync + no filter + allowAllDelete=false).                                                                                                                                                                         | –                                                                                                                            | Task 10, 30             |
+| ReportSyncer.Core.Configuration | Class     | ConfigurationValidator   | Concrete validator implementing all rules from requirements: existing connections, unique names, safety preconditions, schema policy sanity, etc. Responsible for early, deterministic failure. Throws `ConfigurationException` / `SafetyViolationException` with clear messages.                                                                                                                                                              | `IConfigurationValidator`, `SafetyConfig`, `SafetyValidator` (optional reuse)                                                | Task 10, 30             |
+| ReportSyncer.Core.Configuration | Interface | IConfigurationProvider   | High-level facade providing a validated config to callers. Key methods: `Task<SyncConfiguration> LoadAndValidateAsync(string path, CancellationToken ct)`. Throws `ConfigurationException` / `SafetyViolationException` only, hiding lower-level details.                                                                                                                                                                                      | `IConfigurationLoader`, `IConfigurationValidator`, `ILogService`                                                             | Task 10, 40             |
 
 ---
 
 #### `ReportSyncer.Core.Schema`
 
-| Namespace                | Type      | Name                        | Responsibility                                                                                                                                                                                                                                                                                                                                      | Depends on                                                        | Related Tasks   |
-| ------------------------ | --------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------- |
-| ReportSyncer.Core.Schema | Class     | TableSchema                 | Runtime model of a table (schema name, table name, columns, PK definition, indexes). Used by `SchemaMapper` and dependency resolver. Does not throw; purely a data holder.                                                                                                                                                                          | –                                                                 | Task 20         |
-| ReportSyncer.Core.Schema | Class     | ColumnSchema                | Runtime model of a column (name, data type, length/precision, nullability, identity flag). Used for compatibility checks and identity insert decisions.                                                                                                                                                                                             | –                                                                 | Task 20, 50     |
-| ReportSyncer.Core.Schema | Class     | ForeignKeyRelation          | Represents a single FK relationship in the target DB (parent table, child table, column mappings). Inputs into DAG for ordering deletes/inserts. Inconsistent state is caught by its factory / inspector.                                                                                                                                           | –                                                                 | Task 20, 40     |
-| ReportSyncer.Core.Schema | Interface | ISchemaInspector            | Abstraction for retrieving schema metadata from a given database connection. Key methods: `Task<TableSchema> GetTableSchemaAsync(string tableName, CancellationToken ct)`, `Task<IReadOnlyList<ForeignKeyRelation>> GetForeignKeysAsync(CancellationToken ct)`. Throws `SchemaMismatchException` or `SyncExecutionException` on DB access failures. | `DotNetToolkit.Database.Abstractions.IDbContext`                  | Task 20, 40     |
-| ReportSyncer.Core.Schema | Class     | SqlServerSchemaInspector    | SQL Server implementation of `ISchemaInspector` using system views (`sys.tables`, `sys.columns`, `sys.types`, `sys.identity_columns`, `sys.foreign_keys`). Responsible for hydration of `TableSchema` / `ForeignKeyRelation`. Throws `SyncExecutionException` on unexpected SQL errors.                                                             | `ISchemaInspector`, `IDbContext`, `ILogService`                   | Task 20         |
-| ReportSyncer.Core.Schema | Interface | ISchemaMapper               | Abstraction to compare and map source/target schemas with respect to `TableTaskConfig` & `SchemaPolicyConfig`. Key method: `SchemaMappingResult CompareAndMap(TableSchema source, TableSchema target, TableTaskConfig table)`. Throws `SchemaMismatchException` where policy says `fail`, or returns warnings.                                      | `SchemaPolicyConfig`, `ColumnMappingConfig`, `TypeCoercionConfig` | Task 20, 40, 50 |
-| ReportSyncer.Core.Schema | Class     | SchemaMapper                | Concrete implementation of `ISchemaMapper`. Applies automap-by-name, added columns, key config, type coercion policy, and `allowExtraTargetColumns`. Produces final column lists + mapping metadata for the data writer. Throws `SchemaMismatchException`.                                                                                          | `ISchemaMapper`, `ILogService`                                    | Task 20, 50     |
-| ReportSyncer.Core.Schema | Class     | SchemaMappingResult         | Immutable result object from `SchemaMapper`, containing projected source columns, target columns, added columns, key columns, and a list of warnings. Used by `TableRunner` & SQL builder.                                                                                                                                                          | –                                                                 | Task 20, 50     |
-| ReportSyncer.Core.Schema | Interface | IDependencyResolver         | Resolves FK-based table execution order. Key methods: `ExecutionPlan BuildExecutionPlan(IEnumerable<TableTaskConfig> tables, IEnumerable<ForeignKeyRelation> fks)`, with properties for insert-order and delete-order sequences. Throws `SchemaMismatchException` or `SyncExecutionException` for cycles / missing tables.                          | `ForeignKeyRelation`, `TableTaskConfig`                           | Task 20, 40     |
-| ReportSyncer.Core.Schema | Class     | SqlServerDependencyResolver | SQL Server-focused resolver that builds a DAG from FK relations, performs topological sort, and detects cycles (A→B→A). Returns an `ExecutionPlan` with insert-order (parents→children) and delete-order (children→parents). Throws `SchemaMismatchException` on cycle detection.                                                                   | `IDependencyResolver`, `ILogService`                              | Task 20, 40     |
-| ReportSyncer.Core.Schema | Class     | ExecutionPlan               | Encapsulates ordered lists of tables for deletion & insertion phases for a given job. Used by `SyncOrchestrator` to drive table execution. Treated as immutable once created.                                                                                                                                                                       | –                                                                 | Task 20, 40     |
-| ReportSyncer.Core.Schema | Interface | ISchemaPolicyEvaluator      | Optional helper abstraction that encapsulates application of `SchemaPolicyConfig` to mismatches. Key methods: `void EnsureCompatible(TableSchema source, TableSchema target, TableTaskConfig table)`. Throws `SchemaMismatchException` or emits warnings.                                                                                           | `SchemaPolicyConfig`                                              | Task 20         |
-| ReportSyncer.Core.Schema | Class     | SchemaPolicyEvaluator       | Concrete `ISchemaPolicyEvaluator` used internally by `SchemaMapper` to handle `fail`, `warn`, `mapCompatible`. Centralizes the rule logic so it isn’t duplicated.                                                                                                                                                                                   | `ISchemaPolicyEvaluator`                                          | Task 20         |
+| Namespace                | Type      | Name                        | Responsibility                                                                                                                                                                                                                                                                                                                                                                   | Depends on                                                        | Related Tasks   |
+| ------------------------ | --------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------- |
+| ReportSyncer.Core.Schema | Class     | TableSchema                 | Runtime model of a table (schema name, table name, columns, PK definition, indexes). Used by `SchemaMapper` and dependency resolver. Does not throw; purely a data holder.                                                                                                                                                                                                       | –                                                                 | Task 20         |
+| ReportSyncer.Core.Schema | Class     | ColumnSchema                | Runtime model of a column (name, data type, length/precision, nullability, identity flag). Used for compatibility checks and identity insert decisions.                                                                                                                                                                                                                          | –                                                                 | Task 20, 50     |
+| ReportSyncer.Core.Schema | Class     | ForeignKeyRelation          | Represents a single FK relationship in the target DB (parent table, child table, column mappings). Inputs into DAG for ordering deletes/inserts. Inconsistent state is caught by its factory / inspector.                                                                                                                                                                        | –                                                                 | Task 20, 40     |
+| ReportSyncer.Core.Schema | Interface | ISchemaInspector            | Abstraction for retrieving schema metadata from a given database connection. Key methods: `Task<TableSchema> GetTableSchemaAsync(string tableName, CancellationToken ct)`, `Task<IReadOnlyList<ForeignKeyRelation>> GetForeignKeysAsync(CancellationToken ct)`. Throws `SchemaMismatchException` or `SyncExecutionException` on DB access failures.                              | `DotNetToolkit.Database.Abstractions.IDbContext`                  | Task 20, 40     |
+| ReportSyncer.Core.Schema | Class     | SqlServerSchemaInspector    | SQL Server implementation of `ISchemaInspector` using system views (`sys.tables`, `sys.columns`, `sys.types`, `sys.identity_columns`, `sys.foreign_keys`). Responsible for hydration of `TableSchema` / `ForeignKeyRelation`. Throws `SyncExecutionException` on unexpected SQL errors.                                                                                          | `ISchemaInspector`, `IDbContext`, `ILogService`                   | Task 20         |
+| ReportSyncer.Core.Schema | Interface | ISchemaMapper               | Abstraction to compare and map source/target schemas with respect to `TableTaskConfig` & `SchemaPolicyConfig`. Key method: `SchemaMappingResult CompareAndMap(TableSchema source, TableSchema target, TableTaskConfig table)`. Throws `SchemaMismatchException` where policy says `fail`, or returns warnings.                                                                   | `SchemaPolicyConfig`, `ColumnMappingConfig`, `TypeCoercionConfig` | Task 20, 40, 50 |
+| ReportSyncer.Core.Schema | Class     | SchemaMapper                | Concrete implementation of `ISchemaMapper`. Applies automap-by-name, added columns, key config, type coercion policy, and `allowExtraTargetColumns`. Produces final column lists + mapping metadata for the data writer. Throws `SchemaMismatchException`.                                                                                                                       | `ISchemaMapper`, `ILogService`                                    | Task 20, 50     |
+| ReportSyncer.Core.Schema | Class     | SchemaMappingResult         | Immutable result object from `SchemaMapper`, containing projected source columns, target columns, added columns, key columns, and a list of warnings. Used by `TableRunner` & SQL builder.                                                                                                                                                                                       | –                                                                 | Task 20, 50     |
+| ReportSyncer.Core.Schema | Interface | IDependencyResolver         | Resolves FK-based table execution order. Key methods: `ExecutionPlan BuildExecutionPlan(IEnumerable<TableTaskConfig> tables, IEnumerable<ForeignKeyRelation> fks)`, with properties for insert-order and delete-order sequences. Throws `SchemaMismatchException` or `SyncExecutionException` for cycles / missing tables.<br><br>conditionally filter dependency relationships. | `ForeignKeyRelation`, `TableTaskConfig`                           | Task 20, 40     |
+| ReportSyncer.Core.Schema | Class     | SqlServerDependencyResolver | SQL Server-focused resolver that builds a DAG from FK relations, performs topological sort, and detects cycles (A→B→A). Returns an `ExecutionPlan` with insert-order (parents→children) and delete-order (children→parents). Throws `SchemaMismatchException` on cycle detection but conditionally filter dependency relationships.                                              | `IDependencyResolver`, `ILogService`                              | Task 20, 40     |
+| ReportSyncer.Core.Schema | Class     | ExecutionPlan               | Encapsulates ordered lists of tables for deletion & insertion phases for a given job. Used by `SyncOrchestrator` to drive table execution. Treated as immutable once created.                                                                                                                                                                                                    | –                                                                 | Task 20, 40     |
+| ReportSyncer.Core.Schema | Interface | ISchemaPolicyEvaluator      | Optional helper abstraction that encapsulates application of `SchemaPolicyConfig` to mismatches. Key methods: `void EnsureCompatible(TableSchema source, TableSchema target, TableTaskConfig table)`. Throws `SchemaMismatchException` or emits warnings.                                                                                                                        | `SchemaPolicyConfig`                                              | Task 20         |
+| ReportSyncer.Core.Schema | Class     | SchemaPolicyEvaluator       | Concrete `ISchemaPolicyEvaluator` used internally by `SchemaMapper` to handle `fail`, `warn`, `mapCompatible`. Centralizes the rule logic so it isn’t duplicated.                                                                                                                                                                                                                | `ISchemaPolicyEvaluator`                                          | Task 20         |
+##### Schema Inspection: Side vs Level
+Schema inspection has **two independent dimensions**:
+- **Side (`SchemaRole`)**: where the schema comes from.
+  - `Source`: the source DB selected by user/job.
+  - `Target`: the target DB selected by user/job.
+- **Level (`SchemaInspectionLevel`)**: how deep we inspect.
+  - `ExistenceOnly` (Source default): verify selected tables exist (optionally verify required columns exist). No FK needed.
+  - `Full` (Target default): load full table metadata needed by planning and execution (columns, types, PK, FK, identity, etc.).
+`SchemaRole` must be **explicitly provided by the caller** and stored in `SchemaSnapshot` as an immutable property.
+`SchemaInspectionLevel` must also be stored in `SchemaSnapshot` to make debugging and logging unambiguous.
 
 ##### IDependencyResolver
 **Responsibility**
@@ -839,23 +847,47 @@ A separate “Test Surfaces & Seams” section will expand this into a test matr
 
 #### `ReportSyncer.Core.Sync`
 
-|Namespace|Type|Name|Responsibility|Depends on|Related Tasks|
-|---|---|---|---|---|---|
-|ReportSyncer.Core.Sync|Interface|ISyncOrchestrator|Main entrypoint for executing a sync job. Key methods: `Task<JobResult> RunJobAsync(string jobName, CancellationToken ct)` and `Task<JobResult> RunJobAsync(SyncJobConfig job, CancellationToken ct)`. Guarantees pre-flight before any mutation, honors `dryRun`, cancellation, and structured status reporting. Throws `ConfigurationException`, `SafetyViolationException`, `SyncExecutionException`.|`IConfigurationProvider`, `PreFlightValidator`, `ITableRunner`, `ISafetyValidator`, `ExecutionPlan`, `IJobProgressReporter`, `ILogService`|Task 40–60|
-|ReportSyncer.Core.Sync|Class|SyncOrchestrator|Concrete implementation of `ISyncOrchestrator`. Responsibilities: resolve job, run pre-flight, fetch execution plan, orchestrate delete phase (reverse order) then insert phase (forward order), collect metrics, and emit final `JobResult`. It is the only class that owns the high-level “run job” lifecycle. Throws domain exceptions unchanged so hosts can handle them consistently.|`ISyncOrchestrator`, `PreFlightValidator`, `ITableRunner`, `ExecutionPlan`, `WorkEstimator`, `ProgressTracker`|Task 40–60|
-|ReportSyncer.Core.Sync|Class|JobResult|Immutable summary of a completed job (status: success/failure/cancelled, duration, per-table results, rows deleted/inserted, dry-run flag). Returned by `ISyncOrchestrator` and used by history/logging.|`TableResult` (Observability)|Task 40, 60|
-|ReportSyncer.Core.Sync|Class|PreFlightValidator|Aggregates configuration validation, schema inspection, schema mapping, dependency resolution, permissions profiling, safety checks, and initial row-count estimations. Key method: `Task<PreFlightResult> ExecuteChecksAsync(SyncJobConfig job, CancellationToken ct)`. Throws specific domain exceptions; if it fails, `SyncOrchestrator` must not start mutation.|`IConfigurationValidator`, `ISchemaInspector`, `ISchemaMapper`, `IDependencyResolver`, `IPermissionProfiler`, `ISafetyValidator`, `WorkEstimator`, `ILogService`|Task 20, 30, 40, 60|
-|ReportSyncer.Core.Sync|Class|PreFlightResult|Contains validated config, `ExecutionPlan`, schema mapping results per table, permission profiles, estimated work (`rowsToDelete/insert`), and a flag indicating if run is effectively a no-op. Used by orchestrator & table runners.|`ExecutionPlan`, `SchemaMappingResult`, `PermissionsProfile`, `EstimatedDeleteStats`|Task 20, 30, 40, 60|
-|ReportSyncer.Core.Sync|Interface|ITableRunner|Abstraction for executing a single `TableTaskConfig` according to pre-flight metadata. Key method: `Task<TableResult> RunAsync(TableExecutionContext ctx, CancellationToken ct)`. Handles both dry-run and real execution, but never orchestrates multiple tables.|`IDataWriter`, `SchemaMappingResult`, `TableTaskConfig`, `PermissionsProfile`, `ILogService`|Task 40, 50|
-|ReportSyncer.Core.Sync|Class|TableRunner|Concrete `ITableRunner`. Responsibilities: apply delete / insert phases for a single table in the correct order, invoke `IDataWriter.DeleteAsync` / `InsertAsync`, manage identity insert scope, apply filters & parameters, collect metrics, and emit per-table progress events. Translates low-level DB errors into `SyncExecutionException` while preserving context (`JobId`, `TableName`).|`ITableRunner`, `IDataWriter`, `IdentityInsertManager`, `SqlServerQueryBuilder`, `ProgressTracker`|Task 40, 50, 60|
-|ReportSyncer.Core.Sync|Interface|IDataWriter|Abstraction for low-level delete/insert operations against SQL Server. Key methods: `Task<int> DeleteAsync(DeleteCommandContext ctx, CancellationToken ct)`, `Task<int> InsertAsync(InsertCommandContext ctx, CancellationToken ct)`. Must support chunked deletes and batched inserts, optionally via TVPs, and cooperate with identity insert scopes. Throws `SyncExecutionException` for DB-level failures.|`IDbContext`, `SqlServerQueryBuilder`, `SchemaMappingResult`|Task 50|
-|ReportSyncer.Core.Sync|Class|SqlDataWriter|Concrete `IDataWriter` for SQL Server using `DotNetToolkit.Database` abstractions. Implements chunked-delete loop (`DELETE TOP(@ChunkSize)`) and batched multi-row inserts or TVP strategy depending on config. Integrates with `IdentityInsertManager` when needed and reports row counts to `ProgressTracker`.|`IDataWriter`, `IDbContext`, `SqlServerQueryBuilder`, `IdentityInsertManager`, `RunConfig`|Task 50, 60|
-|ReportSyncer.Core.Sync|Class|DeleteCommandContext|Context value object describing a delete operation (target table, filter expression/parameters, chunk size, safety metadata). Keeps SQL generator and data writer stateless.|`TableTaskConfig`, `FilterConfig`, `RunConfig`|Task 50|
-|ReportSyncer.Core.Sync|Class|InsertCommandContext|Context for insert operations (source select, target table, columns mapping, batch size, useTvp flag, identity insert required). Used by `SqlDataWriter` to generate proper commands.|`SchemaMappingResult`, `SyncOptionsConfig`, `RunConfig`, `KeyConfig`, `TypeCoercionConfig`|Task 50|
-|ReportSyncer.Core.Sync|Class|IdentityInsertManager|Utility that manages `SET IDENTITY_INSERT <table> ON/OFF` via RAII/`IDisposable` pattern. Key method: `Task<IdentityInsertScope> AcquireScopeAsync(string tableName, CancellationToken ct)`. Ensures `OFF` is always executed even on error. Throws `SyncExecutionException` and logs strongly if cleanup fails.|`IDbContext`, `ILogService`|Task 50|
-|ReportSyncer.Core.Sync|Class|IdentityInsertScope|Disposable scope returned by `IdentityInsertManager`. On dispose, ensures `SET IDENTITY_INSERT OFF` has executed. Used by `TableRunner` / `SqlDataWriter`.|`IdentityInsertManager`|Task 50|
-|ReportSyncer.Core.Sync|Class|SqlServerQueryBuilder|Generates parameterized SQL strings and `IDbCommandWrapper` setup for common patterns: `SELECT` with optional filter, chunked `DELETE`, batched multi-row `INSERT`, TVP-based inserts. No side effects. Throws `ConfigurationException` for unsupported mapping or invalid config.|`SchemaMappingResult`, `FilterConfig`, `KeyConfig`, `RunConfig`, `DotNetToolkit.Database.Abstractions.IDbCommandWrapper`|Task 50|
-|ReportSyncer.Core.Sync|Class|TableExecutionContext|Aggregates everything `TableRunner` needs: table config, mapping result, permissions, estimated work, connection factory/context, plus job & table identifiers for logging.|`TableTaskConfig`, `SchemaMappingResult`, `PermissionsProfile`, `IDbContext`, `RunConfig`|Task 40–50|
+| Namespace              | Type      | Name                  | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                 | Depends on                                                                                                                                                       | Related Tasks       |
+| ---------------------- | --------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| ReportSyncer.Core.Sync | Interface | ISyncOrchestrator     | Main entrypoint for executing a sync job. Key methods: `Task<JobResult> RunJobAsync(string jobName, CancellationToken ct)` and `Task<JobResult> RunJobAsync(SyncJobConfig job, CancellationToken ct)`. Guarantees pre-flight before any mutation, honors `dryRun`, cancellation, and structured status reporting. Throws `ConfigurationException`, `SafetyViolationException`, `SyncExecutionException`.       | `IConfigurationProvider`, `PreFlightValidator`, `ITableRunner`, `ISafetyValidator`, `ExecutionPlan`, `IJobProgressReporter`, `ILogService`                       | Task 40–60          |
+| ReportSyncer.Core.Sync | Class     | SyncOrchestrator      | Concrete implementation of `ISyncOrchestrator`. Responsibilities: resolve job, run pre-flight, fetch execution plan, orchestrate delete phase (reverse order) then insert phase (forward order), collect metrics, and emit final `JobResult`. It is the only class that owns the high-level “run job” lifecycle. Throws domain exceptions unchanged so hosts can handle them consistently.                     | `ISyncOrchestrator`, `PreFlightValidator`, `ITableRunner`, `ExecutionPlan`, `WorkEstimator`, `ProgressTracker`                                                   | Task 40–60          |
+| ReportSyncer.Core.Sync | Class     | JobResult             | Immutable summary of a completed job (status: success/failure/cancelled, duration, per-table results, rows deleted/inserted, dry-run flag). Returned by `ISyncOrchestrator` and used by history/logging.                                                                                                                                                                                                       | `TableResult` (Observability)                                                                                                                                    | Task 40, 60         |
+| ReportSyncer.Core.Sync | Class     | PreFlightValidator    | Aggregates configuration validation, schema inspection, schema mapping, dependency resolution, permissions profiling, safety checks, and initial row-count estimations. Key method: `Task<PreFlightResult> ExecuteChecksAsync(SyncJobConfig job, CancellationToken ct)`. Throws specific domain exceptions; if it fails, `SyncOrchestrator` must not start mutation.                                           | `IConfigurationValidator`, `ISchemaInspector`, `ISchemaMapper`, `IDependencyResolver`, `IPermissionProfiler`, `ISafetyValidator`, `WorkEstimator`, `ILogService` | Task 20, 30, 40, 60 |
+| ReportSyncer.Core.Sync | Class     | PreFlightResult       | Contains validated config, `ExecutionPlan`, schema mapping results per table, permission profiles, estimated work (`rowsToDelete/insert`), and a flag indicating if run is effectively a no-op. Used by orchestrator & table runners.                                                                                                                                                                          | `ExecutionPlan`, `SchemaMappingResult`, `PermissionsProfile`, `EstimatedDeleteStats`                                                                             | Task 20, 30, 40, 60 |
+| ReportSyncer.Core.Sync | Interface | ITableRunner          | Abstraction for executing a single `TableTaskConfig` according to pre-flight metadata. Key method: `Task<TableResult> RunAsync(TableExecutionContext ctx, CancellationToken ct)`. Handles both dry-run and real execution, but never orchestrates multiple tables.                                                                                                                                             | `IDataWriter`, `SchemaMappingResult`, `TableTaskConfig`, `PermissionsProfile`, `ILogService`                                                                     | Task 40, 50         |
+| ReportSyncer.Core.Sync | Class     | TableRunner           | Concrete `ITableRunner`. Responsibilities: apply delete / insert phases for a single table in the correct order, invoke `IDataWriter.DeleteAsync` / `InsertAsync`, manage identity insert scope, apply filters & parameters, collect metrics, and emit per-table progress events. Translates low-level DB errors into `SyncExecutionException` while preserving context (`JobId`, `TableName`).                | `ITableRunner`, `IDataWriter`, `IdentityInsertManager`, `SqlServerQueryBuilder`, `ProgressTracker`                                                               | Task 40, 50, 60     |
+| ReportSyncer.Core.Sync | Interface | IDataWriter           | Abstraction for low-level delete/insert operations against SQL Server. Key methods: `Task<int> DeleteAsync(DeleteCommandContext ctx, CancellationToken ct)`, `Task<int> InsertAsync(InsertCommandContext ctx, CancellationToken ct)`. Must support chunked deletes and batched inserts, optionally via TVPs, and cooperate with identity insert scopes. Throws `SyncExecutionException` for DB-level failures. | `IDbContext`, `SqlServerQueryBuilder`, `SchemaMappingResult`                                                                                                     | Task 50             |
+| ReportSyncer.Core.Sync | Class     | SqlDataWriter         | Concrete `IDataWriter` for SQL Server using `DotNetToolkit.Database` abstractions. Implements chunked-delete loop (`DELETE TOP(@ChunkSize)`) and batched multi-row inserts or TVP strategy depending on config. Integrates with `IdentityInsertManager` when needed and reports row counts to `ProgressTracker`.                                                                                               | `IDataWriter`, `IDbContext`, `SqlServerQueryBuilder`, `IdentityInsertManager`, `RunConfig`                                                                       | Task 50, 60         |
+| ReportSyncer.Core.Sync | Class     | DeleteCommandContext  | Context value object describing a delete operation (target table, filter expression/parameters, chunk size, safety metadata). Keeps SQL generator and data writer stateless.                                                                                                                                                                                                                                   | `TableTaskConfig`, `FilterConfig`, `RunConfig`                                                                                                                   | Task 50             |
+| ReportSyncer.Core.Sync | Class     | InsertCommandContext  | Context for insert operations (source select, target table, columns mapping, batch size, useTvp flag, identity insert required). Used by `SqlDataWriter` to generate proper commands.                                                                                                                                                                                                                          | `SchemaMappingResult`, `SyncOptionsConfig`, `RunConfig`, `KeyConfig`, `TypeCoercionConfig`                                                                       | Task 50             |
+| ReportSyncer.Core.Sync | Class     | IdentityInsertManager | Utility that manages `SET IDENTITY_INSERT <table> ON/OFF` via RAII/`IDisposable` pattern. Key method: `Task<IdentityInsertScope> AcquireScopeAsync(string tableName, CancellationToken ct)`. Ensures `OFF` is always executed even on error. Throws `SyncExecutionException` and logs strongly if cleanup fails.                                                                                               | `IDbContext`, `ILogService`                                                                                                                                      | Task 50             |
+| ReportSyncer.Core.Sync | Class     | IdentityInsertScope   | Disposable scope returned by `IdentityInsertManager`. On dispose, ensures `SET IDENTITY_INSERT OFF` has executed. Used by `TableRunner` / `SqlDataWriter`.                                                                                                                                                                                                                                                     | `IdentityInsertManager`                                                                                                                                          | Task 50             |
+| ReportSyncer.Core.Sync | Class     | SqlServerQueryBuilder | Generates parameterized SQL strings and `IDbCommandWrapper` setup for common patterns: `SELECT` with optional filter, chunked `DELETE`, batched multi-row `INSERT`, TVP-based inserts. No side effects. Throws `ConfigurationException` for unsupported mapping or invalid config.                                                                                                                             | `SchemaMappingResult`, `FilterConfig`, `KeyConfig`, `RunConfig`, `DotNetToolkit.Database.Abstractions.IDbCommandWrapper`                                         | Task 50             |
+| ReportSyncer.Core.Sync | Class     | TableExecutionContext | Aggregates everything `TableRunner` needs: table config, mapping result, permissions, estimated work, connection factory/context, plus job & table identifiers for logging.                                                                                                                                                                                                                                    | `TableTaskConfig`, `SchemaMappingResult`, `PermissionsProfile`, `IDbContext`, `RunConfig`                                                                        | Task 40–50          |
+
+##### Preflight pipeline (schema-aware)
+
+PreFlightValidator MUST run schema-related steps in this order:
+
+1. Inspect **Source** with `SchemaInspectionLevel.ExistenceOnly`
+   - Validate all user-selected tables exist in Source.
+   - (Optional) Validate required columns exist if config references columns explicitly.
+
+2. Inspect **Target** with `SchemaInspectionLevel.Full`
+   - Load full metadata (columns/PK/FK/identity) for the same selected tables.
+
+3. Schema mapping
+   - For each selected table, compare Source vs Target columns using `ISchemaMapper`.
+   - Apply `ISchemaPolicyEvaluator` rules to decide: fail vs warning vs coercion strategy.
+
+4. Dependency planning (Target-only FK graph)
+   - `IDependencyResolver` builds a DAG using **Target FK relations**, but only over **selected tables**.
+   - If a selected table references a non-selected table (and not explicitly ignored), preflight MUST fail.
+
+5. Safety + permissions + estimation
+   - `IPermissionProfiler`, `ISafetyValidator`, `WorkEstimator` run after schema planning succeeds.
+   - Any failure here aborts the job before mutation.
+
 
 ---
 
@@ -967,23 +999,23 @@ The goal is that coding agents never guess what to throw, where to catch, or how
 
 This table describes how each major operation fails and how the system is expected to behave.
 
-|Operation|Typical failure condition|Exception thrown|Behavior in Core|Behavior in host (`ReportSyncer.Console`)|
-|---|---|---|---|---|
-|Load configuration (`IConfigurationLoader.LoadAsync`)|File not found, YAML parse error, invalid enum values, missing mandatory sections.|`ConfigurationException`|Log at `Error`, no retries. Pre-flight stops immediately.|Print concise message pointing to config file & section, exit with **code 2**.|
-|Validate configuration (`ConfigurationValidator.Validate`)|Conflicting flags (e.g. `allowAllDelete=false` but `preSyncTargetAction=Truncate`), unknown connection, invalid thresholds.|`ConfigurationException` or `SafetyViolationException`|Fail fast before any DB access. No retries.|Log reason; for `ConfigurationException` exit **2**, for `SafetyViolationException` exit **4** with “blocked by safety rules”.|
-|Create DB context (`INamedDbContextFactory.Create`)|Unknown connection name, unsupported provider, invalid connection string.|`ConfigurationException`|No retry; considered design/config error.|Exit **2**.|
-|Inspect schema (`ISchemaInspector.GetTableSchemaAsync`)|Table not found, column not found, insufficient permissions to read metadata, connectivity errors.|`SchemaMismatchException` (missing objects) or `SyncExecutionException` (permissions/connectivity).|May be wrapped in `PreFlightValidator` to aggregate multiple errors then rethrow first / combined message.|Schema mismatch → exit **3**; execution error → exit **5**.|
-|Build execution plan (`IDependencyResolver.BuildExecutionPlan`)|FK cycles, referenced tables not included in job, inconsistent FK metadata.|`SchemaMismatchException`|No retry; considered design or schema issue.|Exit **3**.|
-|Map schemas (`ISchemaMapper.CompareAndMap`)|Incompatible types beyond allowed coercion policy; required columns missing; unsupported mapping config.|`SchemaMismatchException`|No retry; pre-flight fails and core must not proceed to data mutation.|Exit **3**.|
-|Permissions profiling (`IPermissionProfiler.ProbeTablePermissionsAsync`)|Lack of delete/insert permission; inability to set `IDENTITY_INSERT`; probe statement blocked by DB policy.|`SyncExecutionException` or `SafetyViolationException` (if mapped directly into rule violation).|If exception indicates “unsafe to proceed” → `SafetyViolationException`; otherwise treat as execution error and abort job.|Safety violation → exit **4**; execution problem → exit **5**.|
-|Safety checks (`SafetyValidator`)|Same connection for source and target when disallowed, prod→prod copy forbidden, estimated delete exceeds threshold without override.|`SafetyViolationException`|Never retried. Pre-flight fails and no mutation is allowed.|Exit **4** with clear “blocked” messaging.|
-|Work estimation (`WorkEstimator.EstimateAsync`)|Timeout/lock on `SELECT COUNT(*)`, connectivity failure.|`SyncExecutionException`|May use `IRetryPolicy` for transient failures. If still failing, pre-flight fails (no partial run).|Exit **5**.|
-|Run delete phase (`TableRunner`/`SqlDataWriter.DeleteAsync`)|SQL errors during delete, deadlocks, constraints, permission failures, malformed WHERE.|`SyncExecutionException`|May use `IRetryPolicy` for transient DB errors. If unrecoverable, abort job and mark as failed; per-table `TableResult` indicates failure.|Exit **5**.|
-|Run insert phase (`TableRunner`/`SqlDataWriter.InsertAsync`)|Constraint violations, TVP usage error, identity insert not allowed, data conversion failures.|`SyncExecutionException`|No automatic retry for logical failures (constraint violations, conversions). For clearly transient (e.g. deadlock), retry via `IRetryPolicy`. Job marked failed.|Exit **5**.|
-|Identity insert handling (`IdentityInsertManager`)|Failed to set `IDENTITY_INSERT ON/OFF`, connection lost during scope.|`SyncExecutionException`|Always attempts `OFF` in `finally`. If that fails, log at `Fatal` and propagate exception.|Exit **5**; message must clearly mention identity insert failure.|
-|History append (`IHistoryService.AppendAsync`)|Log file IO/parse issues, path permission problems.|`SyncExecutionException`|**Must not** hide job result. Job result is still returned as completed; history write failure is logged separately and may raise exception only if spec says history is required.|If append failure is considered non-fatal: log `Warning` but keep exit code based on job outcome. If considered fatal: exit **5** with explicit “history write failure” note.|
-|Cancellation (`SyncOrchestrator` and down-stack)|User cancellation token triggered while pre-flight or execution is running.|`UserCancelledException` at orchestrator boundary (or raw `OperationCanceledException` internally)|All components must honor `CancellationToken`; no further DML executed after cancellation observed.|Exit **6**, message “Operation cancelled by user.”|
-|Unexpected bug / unhandled exception|Null reference, index out of range, etc., that escape core.|Raw exception at core boundary, wrapped as `UnexpectedInternalException` only in host.|No retry. This is a bug.|Log full stack at `Fatal`, show generic “unexpected internal error” to user, exit **99**.|
+| Operation                                                                | Typical failure condition                                                                                                                                                                  | Exception thrown                                                                                    | Behavior in Core                                                                                                                                                                   | Behavior in host (`ReportSyncer.Console`)                                                                                                                                     |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Load configuration (`IConfigurationLoader.LoadAsync`)                    | File not found, YAML parse error, invalid enum values, missing mandatory sections.                                                                                                         | `ConfigurationException`                                                                            | Log at `Error`, no retries. Pre-flight stops immediately.                                                                                                                          | Print concise message pointing to config file & section, exit with **code 2**.                                                                                                |
+| Validate configuration (`ConfigurationValidator.Validate`)               | Conflicting flags (e.g. `allowAllDelete=false` but `preSyncTargetAction=Truncate`), unknown connection, invalid thresholds.                                                                | `ConfigurationException` or `SafetyViolationException`                                              | Fail fast before any DB access. No retries.                                                                                                                                        | Log reason; for `ConfigurationException` exit **2**, for `SafetyViolationException` exit **4** with “blocked by safety rules”.                                                |
+| Create DB context (`INamedDbContextFactory.Create`)                      | Unknown connection name, unsupported provider, invalid connection string.                                                                                                                  | `ConfigurationException`                                                                            | No retry; considered design/config error.                                                                                                                                          | Exit **2**.                                                                                                                                                                   |
+| Inspect schema (`ISchemaInspector.InspectAsync(request)`)                | - Source missing selected table ⇒ schema/preflight failure (exit 3)<br>- Target mismatch / policy violation ⇒ schema failure (exit 3)<br>- Unexpected DB errors ⇒ execution error (exit 5) | `SchemaMismatchException` (missing objects) or `SyncExecutionException` (permissions/connectivity). | May be wrapped in `PreFlightValidator` to aggregate multiple errors then rethrow first / combined message.                                                                         | Schema mismatch → exit **3**; execution error → exit **5**.                                                                                                                   |
+| Build execution plan (`IDependencyResolver.BuildExecutionPlan`)          | FK cycles, referenced tables not included in job, inconsistent FK metadata.                                                                                                                | `SchemaMismatchException`                                                                           | No retry; considered design or schema issue.                                                                                                                                       | Exit **3**.                                                                                                                                                                   |
+| Map schemas (`ISchemaMapper.CompareAndMap`)                              | Incompatible types beyond allowed coercion policy; required columns missing; unsupported mapping config.                                                                                   | `SchemaMismatchException`                                                                           | No retry; pre-flight fails and core must not proceed to data mutation.                                                                                                             | Exit **3**.                                                                                                                                                                   |
+| Permissions profiling (`IPermissionProfiler.ProbeTablePermissionsAsync`) | Lack of delete/insert permission; inability to set `IDENTITY_INSERT`; probe statement blocked by DB policy.                                                                                | `SyncExecutionException` or `SafetyViolationException` (if mapped directly into rule violation).    | If exception indicates “unsafe to proceed” → `SafetyViolationException`; otherwise treat as execution error and abort job.                                                         | Safety violation → exit **4**; execution problem → exit **5**.                                                                                                                |
+| Safety checks (`SafetyValidator`)                                        | Same connection for source and target when disallowed, prod→prod copy forbidden, estimated delete exceeds threshold without override.                                                      | `SafetyViolationException`                                                                          | Never retried. Pre-flight fails and no mutation is allowed.                                                                                                                        | Exit **4** with clear “blocked” messaging.                                                                                                                                    |
+| Work estimation (`WorkEstimator.EstimateAsync`)                          | Timeout/lock on `SELECT COUNT(*)`, connectivity failure.                                                                                                                                   | `SyncExecutionException`                                                                            | May use `IRetryPolicy` for transient failures. If still failing, pre-flight fails (no partial run).                                                                                | Exit **5**.                                                                                                                                                                   |
+| Run delete phase (`TableRunner`/`SqlDataWriter.DeleteAsync`)             | SQL errors during delete, deadlocks, constraints, permission failures, malformed WHERE.                                                                                                    | `SyncExecutionException`                                                                            | May use `IRetryPolicy` for transient DB errors. If unrecoverable, abort job and mark as failed; per-table `TableResult` indicates failure.                                         | Exit **5**.                                                                                                                                                                   |
+| Run insert phase (`TableRunner`/`SqlDataWriter.InsertAsync`)             | Constraint violations, TVP usage error, identity insert not allowed, data conversion failures.                                                                                             | `SyncExecutionException`                                                                            | No automatic retry for logical failures (constraint violations, conversions). For clearly transient (e.g. deadlock), retry via `IRetryPolicy`. Job marked failed.                  | Exit **5**.                                                                                                                                                                   |
+| Identity insert handling (`IdentityInsertManager`)                       | Failed to set `IDENTITY_INSERT ON/OFF`, connection lost during scope.                                                                                                                      | `SyncExecutionException`                                                                            | Always attempts `OFF` in `finally`. If that fails, log at `Fatal` and propagate exception.                                                                                         | Exit **5**; message must clearly mention identity insert failure.                                                                                                             |
+| History append (`IHistoryService.AppendAsync`)                           | Log file IO/parse issues, path permission problems.                                                                                                                                        | `SyncExecutionException`                                                                            | **Must not** hide job result. Job result is still returned as completed; history write failure is logged separately and may raise exception only if spec says history is required. | If append failure is considered non-fatal: log `Warning` but keep exit code based on job outcome. If considered fatal: exit **5** with explicit “history write failure” note. |
+| Cancellation (`SyncOrchestrator` and down-stack)                         | User cancellation token triggered while pre-flight or execution is running.                                                                                                                | `UserCancelledException` at orchestrator boundary (or raw `OperationCanceledException` internally)  | All components must honor `CancellationToken`; no further DML executed after cancellation observed.                                                                                | Exit **6**, message “Operation cancelled by user.”                                                                                                                            |
+| Unexpected bug / unhandled exception                                     | Null reference, index out of range, etc., that escape core.                                                                                                                                | Raw exception at core boundary, wrapped as `UnexpectedInternalException` only in host.              | No retry. This is a bug.                                                                                                                                                           | Log full stack at `Fatal`, show generic “unexpected internal error” to user, exit **99**.                                                                                     |
 
 ---
 
@@ -1170,13 +1202,13 @@ To avoid random “integration tests for everything”:
 
 ##### Schema (`ReportSyncer.Core.Schema`)
 
-|Component|Test Type|Notes / Seams|
-|---|---|---|
-|`TableSchema`, `ColumnSchema`, `ForeignKeyRelation`, `ExecutionPlan`, `SchemaMappingResult`|Unit|Simple models. Tests only assert correct construction and immutability semantics.|
-|`ISchemaMapper` / `SchemaMapper`|Unit|Given fake `TableSchema` objects, check compatible vs incompatible mappings, added columns, automap, type coercion behavior. No DB required.|
-|`ISchemaPolicyEvaluator` / `SchemaPolicyEvaluator`|Unit|Given mismatched types & policies, assert when `SchemaMismatchException` vs warnings.|
-|`IDependencyResolver` / `SqlServerDependencyResolver`|Unit|Operate on in-memory `ForeignKeyRelation` sets. Test valid DAG ordering and cycle detection.|
-|`ISchemaInspector` / `SqlServerSchemaInspector`|Integration|Requires real SQL Server (LocalDB/Testcontainers) with seeded schema. Tests query system catalog and verify `TableSchema` / `ForeignKeyRelation` are correctly constructed.|
+| Component                                                                                   | Test Type   | Notes / Seams                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TableSchema`, `ColumnSchema`, `ForeignKeyRelation`, `ExecutionPlan`, `SchemaMappingResult` | Unit        | Simple models. Tests only assert correct construction and immutability semantics.                                                                                                                                                                                                                       |
+| `ISchemaMapper` / `SchemaMapper`                                                            | Unit        | Given fake `TableSchema` objects, check compatible vs incompatible mappings, added columns, automap, type coercion behavior. No DB required.                                                                                                                                                            |
+| `ISchemaPolicyEvaluator` / `SchemaPolicyEvaluator`                                          | Unit        | Given mismatched types & policies, assert when `SchemaMismatchException` vs warnings.                                                                                                                                                                                                                   |
+| `IDependencyResolver` / `SqlServerDependencyResolver`                                       | Unit        | Operate on in-memory `ForeignKeyRelation` sets. Test valid DAG ordering and cycle detection.                                                                                                                                                                                                            |
+| `ISchemaInspector` / `SqlServerSchemaInspector`                                             | Integration | Requires real SQL Server (LocalDB/Testcontainers) with seeded schema. Tests query system catalog and verify `TableSchema` / `ForeignKeyRelation` are correctly constructed.<br>- Integration tests MUST cover:<br>    - `ExistenceOnly` (no FK, minimal shape)<br>    - `Full` (FK present and correct) |
 
 **Unit focus:** mapping logic, FK ordering, policy application.  
 **Integration focus:** schema inspection via real system tables.
@@ -1283,110 +1315,77 @@ Below is a **minimal matrix**: categories, target components, and example test n
 ##### Configuration
 
 - **Unit**
-    
     - `ConfigurationValidator_UnknownConnection_ThrowsConfigurationException`
-        
     - `YamlConfigurationLoader_ValidYaml_LoadsExpectedSyncConfiguration`
-        
     - `YamlConfigurationLoader_MissingRequiredField_ThrowsConfigurationException`
-        
     - `ConfigurationValidator_PreSyncWithoutAllowAllDelete_ThrowsSafetyViolation`
-        
-
 ##### Schema
 
 - **Unit**
-    
     - `SchemaMapper_CompatibleTypesWithAutomap_ProducesExpectedMapping`
-        
     - `SchemaMapper_IncompatibleTypesAndPolicyFail_ThrowsSchemaMismatchException`
-        
     - `DependencyResolver_SimpleHierarchy_ReturnsCorrectInsertAndDeleteOrder`
-        
+    - `DependencyResolver_WithIgnoredDependency_SuccessfullyPlansWithoutParent`
     - `DependencyResolver_CycleDetected_ThrowsSchemaMismatchException`
         
 - **Integration**
-    
     - `SqlServerSchemaInspector_TableWithIdentity_ExposesIdentityFlagCorrectly`
-        
     - `SqlServerSchemaInspector_TableWithForeignKey_ResolvesForeignKeyRelations`
         
 
 ##### Security
 
 - **Unit**
-    
     - `SafetyValidator_SameConnectionForbidden_ThrowsSafetyViolation`
-        
     - `SafetyValidator_DeleteAboveThresholdWithoutOverride_ThrowsSafetyViolation`
-        
     - `NameBasedEnvironmentClassifier_ProdSuffix_ClassifiesAsProd`
         
 - **Integration**
-    
     - `SqlServerPermissionProfiler_NoDeletePermission_CanDeleteIsFalse`
-        
     - `SqlServerPermissionProfiler_NoIdentityInsertPermission_FlagsIdentityRestriction`
         
 
 ##### Sync
 
 - **Unit**
-    
     - `SyncOrchestrator_PreFlightFails_DoesNotInvokeTableRunner`
-        
     - `SyncOrchestrator_CancellationRequested_ReportsCancelledJobResult`
-        
     - `TableRunner_DeleteThenInsert_OrderIsCorrect`
-        
     - `SqlServerQueryBuilder_DeleteWithFilter_GeneratesExpectedSql`
         
 - **Integration (single-table / small job)**
-    
     - `SyncOrchestrator_FullDeleteThenInsert_SyncsTargetToSource`
-        
     - `SyncOrchestrator_AppendOnlySync_DoesNotDeleteExistingRows`
-        
     - `TableRunner_WithIdentityInsert_InsertsWithExplicitIdentityValues`
-        
     - `SqlDataWriter_DeleteChunking_DeletesAllRowsInChunks`
         
 - **E2E-style**
-    
     - `EndToEnd_MultiTableJobWithFk_RespectsDependencyOrder`
-        
     - `EndToEnd_DryRun_DoesNotMutateTargetButProducesEstimates`
-        
     - `EndToEnd_CancelDuringInsert_JobStatusIsCancelledAndIdentityInsertOff`
-        
-
-##### Observability & History
-
-- **Unit**
+    - NEW: `EndToEnd_BypassFk_ExecutesIndependentOfParent`
     
-    - `ProgressTracker_MultipleBatches_ComputesEtaAndThroughput`
+
+## 4. YAML Example.md (Configuration Exa
         
+##### Observability & History
+- **Unit**
+    - `ProgressTracker_MultipleBatches_ComputesEtaAndThroughput`
     - `ProgressTracker_ZeroWork_DoesNotCrashAndReportsZeroTotal`
         
 - **Integration**
-    
     - `WorkEstimator_FilteredCount_MatchesExpectedRowCount`
-        
     - `HistoryService_AfterSuccessfulRun_ReturnsRunSummaryWithCorrectMetrics`
         
 
 ##### Infrastructure
 
 - **Unit**
-    
     - `NamedDbContextFactory_UnknownConnection_ThrowsConfigurationException`
-        
     - `ConnectionStringResolver_ValidConnection_ProducesExpectedDatabaseSettings`
-        
     - `ExponentialBackoffRetryPolicy_TransientFailure_RetriesConfiguredTimes`
         
 - **Integration**
-    
     - `NamedDbContextFactory_WithValidConnection_CanOpenAndQueryDatabase`
         
 

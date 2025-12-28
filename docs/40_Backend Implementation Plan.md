@@ -4,50 +4,31 @@
 - `30_ReportSyncer Backend Arch.instruction.md` (Architecture, Classes, Interfaces)
 - `20_ReportSyncer Backend Project Instruction.instruction.md` (Project General Arch)
 
-## Section 1: DotNetToolkit – Hardening & NuGet Packaging
+# Section 1: DotNetToolkit – Hardening & NuGet Packaging
 
 **Project focus:**
 
 - `DotNetToolkit.General` (Guard, Result, general helpers)
-    
 - `DotNetToolkit.Logging` (ILogService + Serilog adapter)
-    
 - `DotNetToolkit.Database` (IDbContext, IDbConnectionFactory, IDbCommandWrapper, IDataMapper, DbContext, DbCommandWrapper, ReflectionDataMapper, DI extensions)
-    
-
 **High-level goal**  
 Turn DotNetToolkit into a clean, domain-agnostic infra library, packaged as NuGet(s), that ReportSyncer.Core consumes but never pollutes with sync-specific logic. This must obey the strict rules that `DotNetToolkit.*` never depends on `ReportSyncer.*` and stays reusable.
 
 ### Global principles for this section
-
 - AI coder **must**:
-    
     - Treat `DotNetToolkit.*` as **domain-agnostic infra**:
-        
         - No mention of ReportSyncer, AGV, sync jobs, safety flags, YAML, etc. in public API or internals.
-            
     - Keep technology stack within:
-        
         - `Microsoft.Extensions.*`, `Microsoft.Data.SqlClient` in Database.
-            
         - No EF, no ORMs, no Dapper in toolkit.
-            
     - Design the public APIs so they can be consumed by any .NET 9 app, not just ReportSyncer.
-        
 - AI coder **may**:
-    
     - Add small helper types (retry, tiny functional helpers) if they are generic.
-        
     - Adjust class names & namespaces slightly to improve clarity, as long as:
-        
         - No breaking change to what ReportSyncer will need (IDbContext, IDbCommandWrapper semantics, etc. match the backend architecture docs).
-            
 - AI coder **must not**:
-    
     - Introduce any dependency on:
-        
         - `ReportSyncer.Core`, `ReportSyncer.Console`, `ReportSyncer.WebApi` or domain exception types.
-            
     - Implement sync-specific SQL (TableTask, preSyncTargetAction, identity insert policy, safety rules) in `DotNetToolkit.Database`. Those belong in `ReportSyncer.Core.Sync`.
         
 
@@ -297,7 +278,7 @@ Make DotNetToolkit a “real” library: tested and packable.
 
 ---
 
-## Section 2 (Revised): Configuration & Error Model – Implementation Plan
+# Section 2 (Revised): Configuration & Error Model – Implementation Plan
 
 Namespace focus: `ReportSyncer.Core.Configuration` (+ shared domain error types)
 
@@ -673,7 +654,7 @@ You’ve cleanly separated:
 This matches your “assign different AI coders per section” model and keeps future you from hunting domain logic inside some “generic helpers” library at 2 a.m.
 
 
-## Section 3: Schema & Dependency Subsystem (`ReportSyncer.Core.Schema`)
+# Section 3: Schema & Dependency Subsystem (`ReportSyncer.Core.Schema`)
 
 > Using the PRD and backend architecture docs, design an **implementation plan** for the “Schema & Dependency Subsystem” in `ReportSyncer.Core.Schema`.
 > 
@@ -921,7 +902,7 @@ This matches your “assign different AI coders per section” model and keeps f
 
 ---
 
-## Section 4 — PreFlight & Sync Orchestration（任务列表）
+# Section 4 — PreFlight & Sync Orchestration（任务列表）
 
 
 > 先把话说清楚：你现在的 Core 代码里 **确实没有** `ReportSyncer.Core.Sync/*`，也 **没有** `ISchemaService / SchemaService`，更没有你吐槽的 `IDependencyResolver`（表依赖拓扑排序那套）。
@@ -1044,20 +1025,13 @@ public sealed record SchemaAnalysisResult(
 **新增路径（建议）**
 
 - `ReportSyncer.Core/Sync/ISyncOrchestrator.cs`
-    
 - `ReportSyncer.Core/Sync/IPreFlightValidator.cs`
-    
 - `ReportSyncer.Core/Sync/Contracts/JobStatus.cs`
-    
 - `ReportSyncer.Core/Sync/Contracts/TableStatus.cs`
-    
 - `ReportSyncer.Core/Sync/Contracts/JobResult.cs`
-    
 - `ReportSyncer.Core/Sync/Contracts/TableResult.cs`
-    
 - `ReportSyncer.Core/Sync/Contracts/PreFlightResult.cs`
     
-
 **接口契约（英文）**
 
 ```csharp
@@ -1086,36 +1060,22 @@ public interface IPreFlightValidator
 ### Task 4.3 — 实现 PreFlightValidator（只做检查 + 产出计划）
 
 **新增路径**
-
 - `ReportSyncer.Core/Sync/PreFlightValidator.cs`
-    
 
 **依赖（必须）**
-
 - `ISchemaService`（Task 4.1）
-    
 
 **规则（写死）**
-
 - Rule 1：`AnalyzeJobAsync` 返回 Fail → 抛 `SchemaMismatchException`，message 必须包含 job name + 至少一个失败原因（mapping 或 dependency）。
-    
 - Rule 2：`RunConfig.dryRun` 只作为 flag 透传，不在这里做执行决策（决策在 Orchestrator）。
     
-
 **Definition of Done（测试）**
-
 - Unit:
-    
     - `PreFlightValidator_WhenSchemaServiceReturnsFailure_ThrowsSchemaMismatchExceptionWithDetails`
-        
     - `PreFlightValidator_CallsSchemaServiceOnce_WithJobSelectedTables`
-        
     - `PreFlightValidator_DryRunFlag_PropagatesToPreFlightResult`
-        
 - Integration（建议用 LocalDB，2 表 1 FK）：
-    
     - `PreFlightValidator_WithLocalDbSchema_ReturnsExecutionPlan`
-        
     - `PreFlightValidator_SourceMissingTable_ThrowsSchemaMismatchException`
         
 
@@ -1124,36 +1084,21 @@ public interface IPreFlightValidator
 ### Task 4.4 — 实现 SyncOrchestrator（Load → Resolve Job → PreFlight → 返回结果）
 
 **新增路径**
-
 - `ReportSyncer.Core/Sync/SyncOrchestrator.cs`
-    
-
 **依赖（必须）**
-
 - `IConfigurationProvider`（已存在）
-    
 - `IPreFlightValidator`（Task 4.3）
     
-
 **规则（写死）**
-
 - Rule 1：必须先 `LoadAndValidateAsync(configPath, overrides, ct)`，再 resolve job，再 preflight。
-    
 - Rule 2：PreFlight 抛任何异常 → Orchestrator 不得吞，直接冒泡。
-    
 - Rule 3：如果是 dry-run：返回 `JobResult`，每张表标记 `Skipped_DryRun`（或等价状态）。
-    
 - Rule 4：如果不是 dry-run：明确抛 `SyncExecutionException("Execution engine not implemented. Implement Section 5.")`。
     
-
 **Definition of Done（测试）**
-
 - Unit:
-    
     - `SyncOrchestrator_LoadsConfig_ResolvesJob_ThenCallsPreFlight`
-        
     - `SyncOrchestrator_WhenPreFlightThrows_DoesNotProceed`
-        
     - `SyncOrchestrator_WhenDryRun_ReturnsJobResultWithSkippedTables`
         
 
@@ -1181,3 +1126,470 @@ public interface IPreFlightValidator
 - 这版 Section 4 把**真实缺口**前置成 Task 4.0/4.1，然后才开始 Sync 领域（4.2+）。
     
 - 测试面只聚焦：dependency planner、schema facade、preflight gate、orchestrator 生命周期。YAML 单测不重复。
+
+
+
+
+---
+# Section 5 — Runtime Execution Pipeline（从 Plan 到真实删+插，但先上“安全门”）
+
+## 主要实现目标
+### 核心目标
+- 将 **Preflight 产物（ExecutionPlan/DAG + mapping + schema snapshot）** 转化为**可重复、可预测**的执行。
+- 支持 **DryRun → RealRun** 的统一 pipeline：DryRun 用于估算/验证/报告，不改数据；RealRun 才做 DML。
+- 明确并落地 **幂等语义**（建议 MVP：Overwrite）。
+### 最小可观测性（为了让 Section 5 能被测试与排障）
+
+- 在实现 RealRun 之前，必须具备**最小级别**的可观测性，否则后续 Integration Test 失败你只能靠猜：
+    - 结构化日志最小相关字段：`JobId` / `Table` / `Phase`（delete/insert/dryrun/preflight-gate）
+    - 进度事件最小模型：Start/End/Skip/Fail（未来 GUI/WebApi 只是消费者）
+    - 在 pipeline 中必须保证 Observability 初始化发生在门禁与执行之前（见文末统一 pipeline）
+- 这部分不要求你一次到位做“完整 Run Report / Retry / 错误聚合”，那些归到 Section 6/7；这里强调的是：**没有最小 telemetry，Section 5 根本不可维护**。
+    
+### 必须做对的决策点（重要算法/语义）
+- **执行顺序**：只能来自 Preflight DAG/ExecutionPlan；执行期禁止“临时重排”。
+- **幂等策略（必须写死）**：
+    - MVP 推荐：`Overwrite`（在过滤范围内先删后插，重跑两次结果一致）。
+    - 明确 Non-goal：Upsert/Merge 以后再做。
+- **Identity Insert 自动化规则（不要自欺欺人）**：
+    - 只有当 insert 列表**显式包含 identity 列**且来源是“外部值”时才需要开启 `IDENTITY_INSERT`。
+    - `IDENTITY_INSERT` 是 session 级别且同 session 只允许一张表 ON，禁止在同一连接上并行多表写入。
+- **事务/批处理边界（选一个，别两套并存）**：
+    - 默认建议：每表一个事务（可控、易回滚、锁时间短）。
+    - 明确 batch size、超时、失败回滚的边界。
+        
+### Guardrails（把 Safety/Permission 直接并入执行入口，不给“绕过”的机会）
+- RealRun 的入口必须被“门禁”保护：
+    - **Permission Profiling**（DryRun vs RealRun 要分级）
+    - **Safety Rules**（集中式规则，不允许散落在执行器里）
+    - （可选但常用）强制先 DryRun 再 RealRun
+- 失败必须是 **fail-fast**，且错误信息可行动（哪个表、哪个动作、缺什么权限/违反哪条规则）。
+    
+
+### 关键约束（硬约束）
+- 任何 FK 顺序/不可执行性必须在 Preflight 阶段暴露，执行期不“碰运气”。
+- 所有 SQL 必须参数化（禁止拼接值）。
+- MVP 阶段不做：并行表执行、多事务策略并存、Upsert/Merge。
+    
+### 验收标准（可验证）
+- DryRun：执行结束后数据完全不变；能输出估算信息。
+- RealRun：
+    - 2 表 FK 场景：父表先于子表写入。
+    - Identity 场景：仅在需要时开启/关闭 identity_insert，且成对。
+    - 可重复运行：同一输入跑两次，结果符合 Overwrite 语义。
+
+## 主要 Tasks
+
+### Input Context（你要求的 4 件套）
+
+1. **Source of Truth（PRD / Behavior）**：ReportSyncer PRD（安全规则、DryRun、Identity Insert、Chunked Delete、依赖顺序等）
+2. **Architecture Standards（Layout / Contracts）**：ReportSyncer Backend Architecture + Detail Arch（分层、接口归属、异常模型、Sync/Security/Observability 的责任边界）
+3. **Current State（你已完成 Section 1-4）**：已有 Config / Schema / Mapping / Dependency / PreFlight 基础能力，SyncOrchestrator 真实执行尚未落地（Section 4 的终点通常是“dry-run 可以，real-run 先别碰”）。
+4. **Target Section**：**Section 5 — Runtime Execution Pipeline**
+    
+---
+### Task 5.1 — 定义执行期核心数据结构（Execution Contracts）
+
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Sync`（或 `ReportSyncer.Core.Sync.Contracts`）
+- DTO/Model（建议）：
+    - `TableExecutionContext`（绑定：`JobId`、`TableTaskConfig`、`SchemaMapping`/`TableMapping`、`Resolved Connections`、`DryRun` flag、`Parameters`）
+    - `DeleteCommandContext` / `InsertCommandContext`（给 IDataWriter 用）
+    - `SyncPhase`（`Preflight`, `Estimate`, `Delete`, `Insert`）
+    - `TableResult` / `JobResult`（若已有则扩字段，不重复造轮子）
+
+**Interface Contract（关键方法/返回）**
+- 这些结构必须能支撑：`ITableRunner.RunAsync(TableExecutionContext, CancellationToken) -> Task<TableResult>`
+- 以及：`IDataWriter.DeleteAsync(DeleteCommandContext, ct) -> Task<int>`、`IDataWriter.InsertAsync(InsertCommandContext, ct) -> Task<int>`
+
+**Logic & Invariants**
+- Must：所有执行所需信息必须来自 Preflight 产物，不允许执行期“临时猜测 schema/重排顺序”。
+- Must-Not：执行期 DTO 不允许持有 Host/UI 类型（Console/WebApi/WPF 的引用一律禁止）。
+- Error Handling：DTO 本身不 throw；后续执行器统一抛 `SyncExecutionException` / `SafetyViolationException`（按责任分层）。
+
+**Definition of Done（Tests）**
+- Unit：构造最小 `TableExecutionContext` 不需要 DB 即可表达 Delete/Insert 所需字段。
+- Unit：序列化（如果你要用于 history/IPC）必须稳定（字段可选，但别今天叫 A 明天叫 B）。
+    
+---
+
+### Task 5.2 — 实现 SQL Query Builder（参数化 Delete/Select/Insert 的生成器）
+
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Sync.Sql`（或 `ReportSyncer.Core.Sync.Internal`）
+- Types：`SqlServerQueryBuilder`（或 `SqlCommandFactory`）
+    
+**Interface Contract**
+- 典型方法（表达意图即可）：
+    - `BuildDelete(DeleteCommandContext) -> DbCommandSpec`
+    - `BuildSelectSource(InsertCommandContext) -> DbCommandSpec`
+    - `BuildInsertTarget(InsertCommandContext) -> DbCommandSpec`（如果用 TVP/BulkCopy，这里返回策略描述而不是一条 SQL）
+    - `BuildCountEstimate(TableExecutionContext) -> DbCommandSpec`
+        
+**Logic & Invariants（直接绑定 PRD 规则）**
+- Must：**所有 SQL 参数化**（禁止拼接值）。
+- Must：Filter（CustomerId / DateRange）必须映射为 WHERE 子句，并严格 AND 组合（PRD 已明确“可同时存在”）。
+- Must：Context Injection（Application → Reporting）只影响 Insert 列清单与参数，不允许在 Source 上做任何写入。
+- Must-Not：不要把 Safety 规则写进 QueryBuilder（比如 allowAllDelete 检查），QueryBuilder 只负责“怎么写 SQL”。
+    
+
+**Error Handling Requirements**
+- QueryBuilder 遇到“无法表达的命令”（比如没有任何 filter 但又被要求 scoped delete）应抛 `ConfigurationException` 或返回 fail（看你现在的错误模型一致性），但**不要**默默生成 `DELETE FROM table` 这种灾难。
+    
+
+**Definition of Done（Tests）**
+- Unit：
+    - “给定 FilterConfig，生成的 DbCommandSpec 必须包含参数，不包含拼接值”
+    - “Context Column mapping 会导致 Insert 列多一列 + 多一个参数”
+- Integration（可选）：对 LocalDB 执行 `SELECT COUNT(*) WHERE ...` 确认语法正确。
+    
+
+---
+
+### Task 5.3 — 实现 Work Estimator（DryRun 估算 + Safety 大删除阈值输入）
+
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Observability`（或临时放 `Sync`，但建议归 Observability，因为它是纯“估算/可观测”能力）
+- Types：`WorkEstimator`, `WorkEstimate`, `EstimatedDeleteStats`
+    
+**Interface Contract**
+- `EstimateAsync(TableExecutionContext, ct) -> Task<WorkEstimate>`
+- `WorkEstimate` 至少包含：`EstimatedRowsToDelete`, `EstimatedRowsToInsert`, `EstimatedDeletePct?`, `Warnings`
+    
+**Logic & Invariants**
+- Must：DryRun 必须调用估算，但 **不得做任何 DML**。
+- Must：估算结果要能支撑 Safety 的 `confirmLargeDeletePct` 判断。
+- Must-Not：估算失败时不要“当作 0 行然后继续”，这会让 Safety 形同虚设。
+
+**Error Handling**
+- DB 失败：抛 `SyncExecutionException`（属于运行时故障，不是配置问题）。
+
+**Definition of Done（Tests）**
+- Unit：QueryBuilder 被正确调用（WHERE 条件正确传递）。
+- Integration（LocalDB）：
+    - 有过滤条件时估算数量正确
+    - 无过滤条件时能返回全表 count（但后续 Safety 可能会拦）
+        
+
+---
+
+### Task 5.4 — 实现 Permission Profiler（DryRun/RealRun 权限分级门禁）
+
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Security`
+- Types：`IPermissionProfiler`, `SqlServerPermissionProfiler`, `PermissionsProfile`
+
+**Interface Contract**
+- `ProbeTablePermissionsAsync(TableExecutionContext, ct) -> Task<PermissionsProfile>`
+- `PermissionsProfile` 至少：`CanDelete`, `CanInsert`, `CanSetIdentityInsert`
+    
+**Logic & Invariants**
+- Must：权限探测必须是 **no-op**（比如事务回滚、DELETE TOP(0)、SET IDENTITY_INSERT 探测后恢复）。
+- Must：DryRun 允许只探测读/Count 权限；RealRun 必须探测 Delete/Insert/IdentityInsert（按 table config）。
+- Must-Not：不要用“直接试着 delete 一行”这种愚蠢方式做探测（你会污染目标数据，然后还自称安全）。
+    
+**Error Handling**
+- 无权限：不抛异常，返回 flags（false）。
+- 其它 SQL 故障：抛 `SyncExecutionException`。
+    
+**Definition of Done（Tests）**
+- Unit：无权限场景 -> flags false。
+- Integration（LocalDB）：
+    - 正常用户 -> flags true
+    - （可选）用受限用户验证 Delete/Insert 探测。
+        
+
+---
+
+### Task 5.5 — 实现 Safety Validator（集中式 Guardrails，禁止散落）
+
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Security`
+- Types：`ISafetyValidator`, `SafetyValidator`, `IEnvironmentClassifier`（若你还没做环境识别）
+    
+**Interface Contract**
+- `ValidateJob(jobCtx) -> void`
+- `ValidateTableTask(jobCtx, tableCtx, estimate) -> void`（estimate 来自 Task 5.3）
+    
+**Logic & Invariants（PRD 强绑定）**
+- Must：禁止 Prod→Prod（forbidProdToProd）。
+- Must：禁止 self-sync（source/target 同库）。
+- Must：`preSyncTargetAction=true` 且无 filter 时，必须拦截，除非 `allowAllDelete=true`。
+- Must：大删除阈值（confirmLargeDeletePct）触发时必须“需要显式确认”。
+    
+
+**关键问题（你需要面对，不然需求不完整）**  
+PRD 说“大删除要暂停等待用户确认”，但 Core 没有“交互式确认通道”的定义。你只有两条路：
+1. **保守模式（推荐）**：直接阻断并返回 “ConfirmationRequired” 结果，让 UI/Host 再次发起（带一个 runtime override acknowledgement）。
+2. 真暂停：Core 进入等待状态，靠 IPC/UI 继续，这会把你拖进并发/状态机地狱，不适合 MVP。
+    
+
+把这个确认机制当成 **Section 5 的必要 Task**，否则你在安全要求上是假的。
+**Error Handling**
+- 违反 Safety：抛 `SafetyViolationException`（信息必须可行动：Job/Table/Rule）。
+**Definition of Done（Tests）**
+- Unit：
+    - prod→prod 阻断
+    - allowAllDelete=false 且无 filter 阻断
+    - 大删除 pct 超阈值 -> 产生 ConfirmationRequired（或 SafetyViolationException，取决于你选的机制，但必须可测）
+        
+
+---
+
+### Task 5.6 — 扩展 PreFlight：纳入 Permission + Safety + Work Estimate（真正的“门禁”）
+
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Sync`
+- Types：`PreFlightValidator`（扩展现有）
+    
+**Interface Contract**
+- `ValidateAsync(effectiveConfig, job, ct) -> Task<PreFlightResult>`（你已有的话就扩字段）
+- `PreFlightResult` 新增：
+    - `PermissionsProfile`（按表/按连接）
+    - `WorkEstimate` / `EstimatedDeleteStats`（按表）
+    - `SafetyDecision`（OK / ConfirmationRequired / Blocked）
+        
+
+**Logic & Invariants**
+- Must：任何失败必须发生在 DML 前。
+- Must：Preflight 必须产出“执行所需的全部输入”，执行期不再二次探测（避免执行期才发现权限/安全问题）。
+- Must-Not：不要把写入 SQL 放进 Preflight（Preflight 只产出计划与门禁结果）。
+    
+
+**Error Handling**
+- Schema/Dependency：`SchemaMismatchException`（你已有）
+- Safety：`SafetyViolationException` 或 “ConfirmationRequired” 可返回型结果（看你选的机制）
+- DB 故障：`SyncExecutionException`
+    
+
+**Definition of Done（Tests）**
+- Unit：Preflight 会调用：SchemaService -> WorkEstimator -> PermissionProfiler -> SafetyValidator（顺序固定）。
+- Integration：在 LocalDB 上跑完整 preflight，返回完整 PreFlightResult。
+    
+
+---
+
+### Task 5.7 — IdentityInsertManager（严格成对 ON/OFF，失败也得 OFF）
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Sync`
+- Types：`IdentityInsertManager`
+    
+
+**Interface Contract**
+- `BeginAsync(targetContext, tableName, ct) -> Task<IAsyncDisposable>`（或等价方式）
+- 目标：让 TableRunner 用 `await using` 级别保证 OFF 执行。
+    
+
+**Logic & Invariants（PRD 强绑定）**
+- Must：只在需要时开启（insert 列清单包含 identity 且来源为外部值，并且 table config 允许）。
+- Must：同一连接同一时刻只能一张表 IDENTITY_INSERT ON（禁止并行写）。
+- Must：失败/取消也要 OFF。
+    
+
+**Error Handling**
+- ON/OFF 执行失败：抛 `SyncExecutionException`（并包含 table/phase）。
+    
+
+**Definition of Done（Tests）**
+- Unit：无论 Insert 成功/失败/抛异常，都调用 OFF。
+- Integration：LocalDB identity 表，开启后插入带 identity 值成功。
+    
+
+---
+
+### Task 5.8 — SqlDataWriter（Chunked Delete + Batched Insert，真实 DML 引擎）
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Sync`
+- Types：`IDataWriter`, `SqlDataWriter`
+    
+
+**Interface Contract**
+- `DeleteAsync(DeleteCommandContext, ct) -> Task<int>`（返回删除行数）
+- `InsertAsync(InsertCommandContext, ct) -> Task<int>`（返回插入行数）
+    
+
+**Logic & Invariants（PRD/Plan 强绑定）**
+- Must：Delete 必须 chunked（避免 log 爆炸）。
+- Must：Insert 必须 batched（batch size 来自 RunConfig），且要可取消。
+- Must：Source 永远只读，不允许任何 DML。
+- Must-Not：不要实现 Upsert/Merge（Section 5 明确 non-goal）。
+    
+
+**错误与异常要求**
+- SQL 超时/约束冲突/网络抖动：抛 `SyncExecutionException`，消息必须包含：table、phase、关键参数（但不要泄露 connection string 全量）。
+    
+
+**Definition of Done（Tests）**
+- Unit：
+    - DeleteAsync 以 chunk 循环直到 0 行
+    - InsertAsync 按 batch 调用底层执行
+- Integration（LocalDB）：
+    - 过滤 delete + insert 后数据符合预期
+    - 大表（模拟）不会一次性 delete 全表（验证 chunk 行为）
+        
+
+---
+
+### Task 5.9 — TableRunner（单表 Overwrite 语义：Delete → Insert）
+
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Sync`
+- Types：`ITableRunner`, `TableRunner`
+    
+
+**Interface Contract**
+- `RunAsync(TableExecutionContext, ct) -> Task<TableResult>`
+    
+**Logic & Invariants**
+- Must：Overwrite 语义落地：在 filter 范围内先删后插，重跑两次结果一致。
+- Must：尊重 `preSyncTargetAction`（为 false 时跳过 delete）。
+- Must：IdentityInsert scope 由 TableRunner 管理（不要让 Orchestrator 管）。
+- DryRun：只做 Estimate + 产出 TableResult（不得触发 DataWriter）。
+    
+
+**Error Handling**
+- DataWriter 抛错：TableRunner 包装/补充上下文后抛 `SyncExecutionException`（必须带 jobId/table/phase）。
+    
+**Definition of Done（Tests）**
+- Unit：用 fake `IDataWriter` 验证调用顺序 delete→insert、以及 dryrun 不调用 writer。
+- Integration：LocalDB 两次运行结果一致。
+    
+
+---
+
+### Task 5.10 — SyncOrchestrator RealRun 落地（按 ExecutionPlan 执行，禁止“临时重排”）
+
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Sync`
+- Types：`SyncOrchestrator`（扩展现有）
+    
+**Interface Contract**
+- 仍然是：`RunJobAsync(configPath, jobName, overrides, ct) -> Task<JobResult>`（你现有签名保持一致即可）
+
+**Logic & Invariants**
+- Must：执行顺序只能来自 `ExecutionPlan`：
+    - Delete：children→parents
+    - Insert：parents→children
+        
+- Must：禁止并行表执行（Section 5 non-goal，且 identity_insert 也不允许并行）。
+- Must：如果 Preflight 返回 ConfirmationRequired，Orchestrator 必须在任何 DML 前停止，并返回“被阻断”的 JobResult（或抛 SafetyViolationException，取决于你选的确认机制）。
+- Must-Not：Orchestrator 不得直接写 SQL，不得绕过 TableRunner/IDataWriter。
+    
+
+**Error Handling**
+- 取消：将 `OperationCanceledException` 映射为 `UserCancelledException`（或你现有约定）。
+- 其它：原样抛 domain exception，让 host 做统一处理。
+    
+
+**Definition of Done（Tests）**
+- Unit：验证 Delete phase 使用 DeleteOrder，Insert phase 使用 InsertOrder。
+- Integration：LocalDB 有 FK 的 2 表场景，父表先插入，子表后插入。
+    
+
+---
+
+### Task 5.11 — “最小可观测性”落地（只做 Section 5 必需的那点，不要贪）
+
+**Structural Scope**
+- Namespace：`ReportSyncer.Core.Observability`
+- Types：
+    - `IJobProgressReporter`（Start/End/Skip/Fail 事件）
+    - `JobProgressEvent` / `TableProgressEvent`（最小 payload：JobId/Table/Phase/Rows/Elapsed）
+        
+**Interface Contract**
+- `Report(JobProgressEvent)` / `Report(TableProgressEvent)`（同步或异步都行，但要稳定）
+    
+**Logic & Invariants**
+- Must：DryRun/RealRun 都要发事件，不然你后续测试与排障完全靠玄学。
+- Must-Not：不要在 Section 5 做 History 持久化/完整 report 文件（那是 Section 6）。
+
+**Definition of Done（Tests）**
+- Unit：跑一个 fake job，事件序列符合：JobStart -> (TableStart/TableEnd)* -> JobEnd。
+- Unit：错误时必须有 Fail 事件，并带 phase/table。
+    
+
+---
+
+### Task 5.12 — 端到端 Integration Test 组装（把 Section 5 的“验收标准”变成自动化）
+
+**Structural Scope**
+- Project：`ReportSyncer.Core.Tests`（Integration）
+- Fixture：LocalDB schema + seed data（两表 FK、identity 表、历史表）
+
+**Definition of Done（必须覆盖的集成用例）**
+
+- DryRun：执行后数据完全不变，但能产出估算与计划。
+- RealRun Overwrite：同一输入跑两次，结果一致。
+- FK 顺序：父表先插入，子表后插入。
+- Identity Insert：仅在需要时开启，且 ON/OFF 成对。
+- Safety：无 filter 且 allowAllDelete=false 时必须阻断。
+- Large delete：触发阈值时进入 ConfirmationRequired 或阻断（按你选的机制），且没有任何 DML。
+
+---
+
+- **大删除确认**：PRD 要“暂停等确认”，但你必须给 Core 一个可测试的确认输入（runtime override / 二次调用）。否则你只能“直接失败”，那不叫确认。
+- **Safety 不能散落**：allowAllDelete / prod→prod / self-sync 这种必须集中，否则以后你会修出 3 套规则，最后谁都不知道哪套生效。
+- **Source 永远只读**：你只要在 Source 上误执行一次 DML，这工具就从“同步工具”变成“职业生涯终结者”。
+以上就是 Section 5 的任务清单。你把这份丢给下一个 Developer，他们就能据此写 Step-by-step playbook，而且不会把 Scope 膨胀到 Section 6/7 去。
+
+---
+
+## Section 6 — Observability & Run Artifacts（先让人类知道它在干嘛）
+
+### 6.1 核心目标
+- 在不依赖 host（Console/WebApi/GUI）的前提下，提供**可消费的运行信息**：日志、进度事件、结果报告。
+### 6.2 必须做对的决策点
+
+- **结构化日志**：必须具备 Job/Table/Phase 的 correlation（不然无法排障）。
+- **进度事件模型**：Start/End/Skip/Fail + 最小 payload（table、rows、elapsed、error）。
+- **Run Report**：机器可读（JSON/目录输出皆可），包含：plan 摘要、每表结果、耗时、错误列表。
+- **取消**：job 级 cancellation（后续 GUI/WebApi 必需）。
+    
+### 6.3 关键约束
+
+- Observability 必须是 library 级能力，host 只是 sink/consumer。
+- 错误聚合必须可行动（不要只有 exception dump）。
+    
+
+### 6.4 验收标准
+- 跑一次 job：
+    - 日志可定位到“哪个 job / 哪张表 / 哪个阶段”。
+    - 事件序列符合预期（开始→结束/开始→失败）。
+    - report 文件落地且字段完整。
+        
+
+---
+
+## Section 7 — Reliability & Operator Experience（重试、稳定性、可控失败）
+
+### 7.1 核心目标
+
+- 提供基础 resilience，但**不制造重复写入事故**。
+    
+
+### 7.2 必须做对的决策点
+
+- **Retry 分类**：
+    
+    - 仅对“读/探测/元数据查询”等可重试操作生效。
+        
+    - delete/insert 默认不可重试（除非你能证明幂等并且事务保证一致性）。
+        
+- **错误分类与回滚边界**：
+    
+    - 明确哪些错误触发立即 abort，哪些可以降级/跳过（MVP 通常直接 abort）。
+        
+
+### 7.3 关键约束
+
+- 禁止“看见超时就重试写入”这种赌博行为。
+    
+- 不引入复杂恢复（resume）机制作为 MVP。
+    
+
+### 7.4 验收标准
+
+- 人为制造瞬时 read 错误：能按策略重试并成功。
+    
+- 人为制造 write 错误：不重试写入，能清晰报告失败点与回滚结果。
+    

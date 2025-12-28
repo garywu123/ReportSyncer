@@ -43,6 +43,7 @@ syncJobs:
         preSyncTargetAction: false
         allowAllDelete: false
         enableIdentityInsert: true
+        ignoreDependencies: true # Bypass check for the parent table 'Orders'
         filter:
           dateColumn: "OrderDate"
           startDate: "2025-01-01"
