@@ -45,6 +45,9 @@ public interface IDependencyResolver
     /// Tables selected for this sync job (from enabled <c>TableTask</c> entries).
     /// Must match tables present in <paramref name="targetSnapshot"/>.
     /// </param>
+    /// <param name="ignoreDependenciesMap">
+    /// Map of table identifiers to a flag indicating whether FK parent validation should be bypassed for that table.
+    /// </param>
     /// <returns>
     /// Success: <see cref="ExecutionPlan"/> with topologically sorted insert/delete orders.
     /// Failure: Error message with details about missing parents or cycles.
@@ -77,5 +80,6 @@ public interface IDependencyResolver
     /// </remarks>
     Result<ExecutionPlan> BuildExecutionPlan(
         SchemaSnapshot targetSnapshot,
-        IReadOnlyList<TableIdentifier> selectedTargetTables);
+        IReadOnlyList<TableIdentifier> selectedTargetTables,
+        IReadOnlyDictionary<TableIdentifier, bool> ignoreDependenciesMap);
 }

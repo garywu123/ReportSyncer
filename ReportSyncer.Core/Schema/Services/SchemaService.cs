@@ -164,7 +164,14 @@ public sealed class SchemaService(
         Result<ExecutionPlan> planResult;
         try
         {
-            planResult = _resolver.BuildExecutionPlan(targetSnapshot, targetTables);
+            var ignoreMap = new Dictionary<TableIdentifier, bool>();
+            foreach (var t in enabledTasks)
+            {
+                var targetId = TableIdentifier.Parse(t.Target);
+                ignoreMap[targetId] = t.IgnoreDependencies;
+            }
+
+            planResult = _resolver.BuildExecutionPlan(targetSnapshot, targetTables, ignoreMap);
         }
         catch (Exception ex)
         {

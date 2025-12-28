@@ -98,6 +98,7 @@ public class YamlConfigurationLoaderUnitTests
         var table = job.Tables[0];
         Assert.Equal("dbo.SourceTable", table.Source);
         Assert.Equal("dbo.TargetTable", table.Target);
+        Assert.False(table.IgnoreDependencies);
     }
 
     [Fact]
@@ -123,6 +124,7 @@ public class YamlConfigurationLoaderUnitTests
         Assert.True(orders.EnableIdentityInsert);
         Assert.NotNull(orders.ColumnMapping);
         Assert.True(orders.ColumnMapping.AutomapByName);
+        Assert.True(orders.IgnoreDependencies);
 
         Assert.NotNull(orders.ColumnMapping.Mappings);
         Assert.Equal("OrderId", orders.ColumnMapping.Mappings["OrderId"].FromSource);
@@ -222,6 +224,22 @@ public class YamlConfigurationLoaderUnitTests
         Assert.NotNull(table.Filter);
         Assert.Equal("{StartDate}", table.Filter!.StartDate);
         Assert.Equal("{EndDate}", table.Filter!.EndDate);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WithIgnoreDependenciesFlag_MapsValues()
+    {
+        var path = GetTestFilePath("sync_ignore_dependencies.yaml");
+        Assert.True(File.Exists(path), $"Test YAML not found: {path}");
+
+        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var cfg = await loader.LoadAsync(path, CancellationToken.None);
+
+        Assert.NotNull(cfg);
+        var job = cfg.SyncJobs.Single(j => j.Name == "JobIgnore");
+        Assert.Equal(2, job.Tables.Count);
+        Assert.True(job.Tables[0].IgnoreDependencies);
+        Assert.False(job.Tables[1].IgnoreDependencies);
     }
 
     [Fact]

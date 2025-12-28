@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FluentAssertions;
+using DotNetToolkit.General;
 using ReportSyncer.Core.Schema;
 using ReportSyncer.Core.Schema.Dependency;
 using Xunit;
@@ -16,6 +17,13 @@ namespace ReportSyncer.Core.Tests.UnitTests.Schema.Dependency;
 public class DependencyResolverUnitTests
 {
     private readonly IDependencyResolver _resolver = new DependencyResolver();
+    private static readonly IReadOnlyDictionary<TableIdentifier, bool> EmptyIgnoreMap = new Dictionary<TableIdentifier, bool>();
+
+    private Result<ExecutionPlan> BuildPlan(
+        SchemaSnapshot snapshot,
+        IReadOnlyList<TableIdentifier> selected,
+        IReadOnlyDictionary<TableIdentifier, bool>? ignore = null) =>
+        _resolver.BuildExecutionPlan(snapshot, selected, ignore ?? EmptyIgnoreMap);
 
     [Fact]
     public void BuildExecutionPlan_WithNoForeignKeys_ReturnsAllTablesInAnyOrder()
@@ -30,7 +38,7 @@ public class DependencyResolverUnitTests
 
         var selected = new[] { table1, table2 };
 
-        var result = _resolver.BuildExecutionPlan(snapshot, selected);
+        var result = BuildPlan(snapshot, selected);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.InsertOrder.Should().HaveCount(2);
@@ -60,7 +68,7 @@ public class DependencyResolverUnitTests
 
         var selected = new[] { customers, orders };
 
-        var result = _resolver.BuildExecutionPlan(snapshot, selected);
+        var result = BuildPlan(snapshot, selected);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.InsertOrder.Should().Equal(customers, orders);
@@ -88,7 +96,7 @@ public class DependencyResolverUnitTests
 
         var selected = new[] { tableA, tableB, tableC };
 
-        var result = _resolver.BuildExecutionPlan(snapshot, selected);
+        var result = BuildPlan(snapshot, selected);
 
         result.IsSuccess.Should().BeTrue();
         // Insert order should be C, B, A
@@ -117,12 +125,40 @@ public class DependencyResolverUnitTests
 
         var selected = new[] { orders }; // customers not selected
 
-        var result = _resolver.BuildExecutionPlan(snapshot, selected);
+        var result = BuildPlan(snapshot, selected);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Orders");
         result.Error.Should().Contain("Customers");
         result.Error.Should().Contain("not included");
+    }
+
+    [Fact]
+    public void BuildExecutionPlan_WithMissingParentAndIgnoreFlag_Succeeds()
+    {
+        var customers = new TableIdentifier("dbo", "Customers");
+        var orders = new TableIdentifier("dbo", "Orders");
+
+        var fk = new ForeignKeySchema(
+            "FK_Orders_Customers",
+            fromTable: orders,
+            toTable: customers,
+            columnPairs: new[] { new ColumnPair("CustomerId", "CustomerId") },
+            isCascadeDelete: false
+        );
+
+        var snapshot = CreateSnapshot(
+            (customers, Array.Empty<ForeignKeySchema>()),
+            (orders, new[] { fk })
+        );
+
+        var selected = new[] { orders }; // customers not selected
+        var ignoreMap = new Dictionary<TableIdentifier, bool> { [orders] = true };
+
+        var result = BuildPlan(snapshot, selected, ignoreMap);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.InsertOrder.Should().Equal(orders);
     }
 
     [Fact]
@@ -143,7 +179,7 @@ public class DependencyResolverUnitTests
 
         var selected = new[] { tableA, tableB };
 
-        var result = _resolver.BuildExecutionPlan(snapshot, selected);
+        var result = BuildPlan(snapshot, selected);
 
         result.IsFailure.Should().BeTrue();
         ((result.Error ?? string.Empty).Contains("Circular") || (result.Error ?? string.Empty).Contains("Cycle")).Should().BeTrue();
@@ -172,11 +208,34 @@ public class DependencyResolverUnitTests
         // Select only the children, leaving parents out
         var selected = new[] { child1, child2 };
 
-        var result = _resolver.BuildExecutionPlan(snapshot, selected);
+        var result = BuildPlan(snapshot, selected);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Parent1");
         result.Error.Should().Contain("Parent2");
+    }
+
+    [Fact]
+    public void BuildExecutionPlan_WithIgnoreFlagAndSelectedParent_StillOrdersDependency()
+    {
+        var parent = new TableIdentifier("dbo", "Parent");
+        var child = new TableIdentifier("dbo", "Child");
+
+        var fk = new ForeignKeySchema("FK_Child_Parent", child, parent,
+            new[] { new ColumnPair("ParentId", "Id") }, false);
+
+        var snapshot = CreateSnapshot(
+            (parent, Array.Empty<ForeignKeySchema>()),
+            (child, new[] { fk })
+        );
+
+        var selected = new[] { parent, child };
+        var ignoreMap = new Dictionary<TableIdentifier, bool> { [child] = true };
+
+        var result = BuildPlan(snapshot, selected, ignoreMap);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.InsertOrder.Should().Equal(parent, child);
     }
 
     [Fact]
@@ -195,7 +254,7 @@ public class DependencyResolverUnitTests
 
         var selected = new[] { a, b };
 
-        var result = _resolver.BuildExecutionPlan(snapshot, selected);
+        var result = BuildPlan(snapshot, selected);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.DeleteOrder.Should().Equal(result.Value.InsertOrder.Reverse());

@@ -15,8 +15,8 @@ public sealed class DependencyResolver : IDependencyResolver
     /// <summary>
     /// Build an <see cref="ExecutionPlan"/> for the provided <paramref name="selectedTargetTables"/> against
     /// the <paramref name="targetSnapshot"/>. Performs validation that all selected tables exist and that
-    /// parent tables referenced by foreign keys are also selected. Uses a topological sort to derive a
-    /// safe insert order; the delete order is the reverse of the insert order.
+    /// parent tables referenced by foreign keys are also selected (unless explicitly bypassed via <paramref name="ignoreDependenciesMap"/>).
+    /// Uses a topological sort to derive a safe insert order; the delete order is the reverse of the insert order.
     /// </summary>
     /// <param name="targetSnapshot">The inspected target schema snapshot.</param>
     /// <param name="selectedTargetTables">The list of tables selected for the job (may be empty).</param>
@@ -27,10 +27,12 @@ public sealed class DependencyResolver : IDependencyResolver
     /// </returns>
     public Result<ExecutionPlan> BuildExecutionPlan(
         SchemaSnapshot targetSnapshot,
-        IReadOnlyList<TableIdentifier> selectedTargetTables)
+        IReadOnlyList<TableIdentifier> selectedTargetTables,
+        IReadOnlyDictionary<TableIdentifier, bool> ignoreDependenciesMap)
     {
         Guard.NotNull(targetSnapshot, nameof(targetSnapshot));
         Guard.NotNull(selectedTargetTables, nameof(selectedTargetTables));
+        Guard.NotNull(ignoreDependenciesMap, nameof(ignoreDependenciesMap));
 
         if (selectedTargetTables.Count == 0)
         {
@@ -58,8 +60,14 @@ public sealed class DependencyResolver : IDependencyResolver
             foreach (var fk in tableSchema.ForeignKeys)
             {
                 var parent = fk.ToTable;
+                var shouldIgnore = ignoreDependenciesMap.TryGetValue(table, out var val) && val;
                 if (!selectedSet.Contains(parent))
                 {
+                    if (shouldIgnore)
+                    {
+                        continue;
+                    }
+
                     errors.Add(DependencyValidationError.MissingParent(table, parent));
                 }
                 else

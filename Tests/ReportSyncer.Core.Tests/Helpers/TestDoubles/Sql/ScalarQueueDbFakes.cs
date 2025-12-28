@@ -1,3 +1,5 @@
+#pragma warning disable CS8764, CS8765
+
 using System.Collections;
 using System.Data;
 using System.Data.Common;
@@ -102,8 +104,9 @@ internal sealed class ScalarQueueParameterCollection : DbParameterCollection
     public override void Insert(int index, object value) => _inner.Insert(index, (DbParameter)value);
     public override void Remove(object value) => _inner.Remove((DbParameter)value);
     public override void RemoveAt(int index) => _inner.RemoveAt(index);
-    public override void RemoveAt(string parameterName)
+    public override void RemoveAt(string? parameterName)
     {
+        if (parameterName is null) return;
         var idx = IndexOf(parameterName);
         if (idx >= 0) _inner.RemoveAt(idx);
     }

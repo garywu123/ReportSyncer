@@ -1,4 +1,5 @@
 using FluentAssertions;
+using System.Linq;
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Schema.Services;
 using ReportSyncer.Core.Tests.Helpers.TestDoubles;
@@ -207,7 +208,7 @@ public class SchemaServiceUnitTests
 
         var inspector = new FakeInspector();
         var resolver = new FakeResolver();
-        resolver.OnBuild = (snap, tables) => Result<ExecutionPlan>.Fail("missing parent");
+        resolver.OnBuild = (snap, tables, map) => Result<ExecutionPlan>.Fail("missing parent");
 
         var svc = new SchemaService(inspector, new FakeMapper(), resolver);
 
@@ -227,7 +228,7 @@ public class SchemaServiceUnitTests
         var mapper = new FakeMapper();
         var resolver = new FakeResolver();
         // Return a non-empty execution plan to satisfy assertion
-        resolver.OnBuild = (snap, tables) => Result<ExecutionPlan>.Ok(
+        resolver.OnBuild = (snap, tables, map) => Result<ExecutionPlan>.Ok(
             new ExecutionPlan(new[] { TableIdentifier.Parse("dbo.T") }, new[] { TableIdentifier.Parse("dbo.T") }));
 
         var svc = new SchemaService(inspector, mapper, resolver);
@@ -315,6 +316,40 @@ public class SchemaServiceUnitTests
         // should only contain the single unique target table
         targetReq.Tables.Count.Should().Be(1);
         targetReq.Tables.First().ToString().Should().Be("dbo.T");
+    }
+
+    [Fact]
+    public async Task AnalyzeJobAsync_PassesIgnoreDependenciesMapToResolver()
+    {
+        var job = CreateJob("job-ignore", "src", "tgt",
+            new TableTaskConfig("dbo.S1", "dbo.T1", enabled: true, ignoreDependencies: true),
+            new TableTaskConfig("dbo.S2", "dbo.T2", enabled: true, ignoreDependencies: false));
+
+        var cfg = CreateConfig(new[] { Conn("src"), Conn("tgt") }, new[] { job });
+
+        var inspector = new FakeInspector();
+        inspector.OnInspect = (req, ct) =>
+        {
+            var tables = req.Tables.Select(t =>
+                new TableSchema(t, Array.Empty<ColumnSchema>(), Array.Empty<string>(), Array.Empty<ForeignKeySchema>()));
+            return Task.FromResult(new SchemaSnapshot(tables, req.Role, req.Level));
+        };
+
+        var resolver = new FakeResolver();
+
+        var svc = new SchemaService(inspector, new FakeMapper(), resolver);
+
+        var result = await svc.AnalyzeJobAsync(cfg, job, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        resolver.Captured.Should().ContainSingle();
+        var captured = resolver.Captured.Single();
+        var t1 = TableIdentifier.Parse("dbo.T1");
+        var t2 = TableIdentifier.Parse("dbo.T2");
+        captured.ignoreMap.Should().ContainKey(t1);
+        captured.ignoreMap.Should().ContainKey(t2);
+        captured.ignoreMap[t1].Should().BeTrue();
+        captured.ignoreMap[t2].Should().BeFalse();
     }
 
     [Fact]

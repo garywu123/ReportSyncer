@@ -94,7 +94,7 @@ public class YamlConfigurationLoaderIntegrationTests
         Assert.False(File.Exists(path), $"Test file unexpectedly exists: {path}");
 
         var loader = new YamlConfigurationLoader(new DummyLogService());
-        await Assert.ThrowsAsync<ConfigurationException>(async () =>
+        await Assert.ThrowsAsync<FileNotFoundException>(async () =>
         {
             await loader.LoadAsync(path, CancellationToken.None);
         });

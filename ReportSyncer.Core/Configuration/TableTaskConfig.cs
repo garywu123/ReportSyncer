@@ -157,6 +157,17 @@ namespace ReportSyncer.Core.Configuration
         public SyncOptionsConfig? SyncOptions { get; }
 
         /// <summary>
+        /// Gets a value indicating whether FK dependency validation should be bypassed
+        /// for this table when building the execution plan.
+        /// </summary>
+        /// <remarks>
+        /// When true, the dependency resolver will not fail the plan if a referenced parent
+        /// table is not part of the selected set. Use with caution; runtime FK constraints may
+        /// still block inserts if the parent data is absent.
+        /// </remarks>
+        public bool IgnoreDependencies { get; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="TableTaskConfig"/> class.
         /// </summary>
         /// <param name="source">
@@ -190,6 +201,9 @@ namespace ReportSyncer.Core.Configuration
         /// <param name="syncOptions">
         /// Optional table-level sync options that override global defaults.
         /// </param>
+        /// <param name="ignoreDependencies">
+        /// Whether to bypass FK dependency validation for this table during planning. Defaults to false.
+        /// </param>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="source"/> or <paramref name="target"/> is null.
         /// </exception>
@@ -206,7 +220,8 @@ namespace ReportSyncer.Core.Configuration
             FilterConfig? filter = null,
             ColumnMappingConfig? columnMapping = null,
             KeyConfig? keys = null,
-            SyncOptionsConfig? syncOptions = null)
+            SyncOptionsConfig? syncOptions = null,
+            bool ignoreDependencies = false)
         {
             ArgumentNullException.ThrowIfNull(source);
             if (string.IsNullOrWhiteSpace(source))
@@ -225,6 +240,7 @@ namespace ReportSyncer.Core.Configuration
             ColumnMapping = columnMapping;
             Keys = keys;
             SyncOptions = syncOptions;
+            IgnoreDependencies = ignoreDependencies;
         }
     }
 }

@@ -1,0 +1,35 @@
+## Test file: sync_ignore_dependencies.yaml
+## Purpose: Verify YAML loader maps ignoreDependencies flags to TableTaskConfig.
+version: "1.0"
+run:
+  dryRun: false
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: true
+  requireDifferentConnections: true
+  confirmLargeDeletePct: 0.5
+schemaPolicy:
+  onMismatch: "Fail"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: false
+connections:
+  - name: "Src"
+    connectionString: "Server=.;Database=Src;Integrated Security=true;"
+    environment: "Dev"
+    type: "Application"
+  - name: "Tgt"
+    connectionString: "Server=.;Database=Tgt;Integrated Security=true;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "JobIgnore"
+    sourceConnection: "Src"
+    targetConnection: "Tgt"
+    tables:
+      - source: "dbo.Parent"
+        target: "dbo.Parent"
+        ignoreDependencies: true
+      - source: "dbo.Child"
+        target: "dbo.Child"

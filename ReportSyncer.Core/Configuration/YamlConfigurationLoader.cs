@@ -381,7 +381,8 @@ namespace ReportSyncer.Core.Configuration
                                         filter: filter,
                                         columnMapping: mapping,
                                         keys: keys,
-                                        syncOptions: options
+                                        syncOptions: options,
+                                        ignoreDependencies: t.IgnoreDependencies.GetValueOrDefault(false)
                                     );
                                 }
                             )
@@ -497,6 +498,7 @@ namespace ReportSyncer.Core.Configuration
             public bool?             PreSyncTargetAction  { get; set; }
             public bool?             AllowAllDelete       { get; set; }
             public bool?             EnableIdentityInsert { get; set; }
+            public bool?             IgnoreDependencies   { get; set; }
             public FilterDto?        Filter               { get; set; }
             public ColumnMappingDto? ColumnMapping        { get; set; }
             public KeyDto?           Keys                 { get; set; }
