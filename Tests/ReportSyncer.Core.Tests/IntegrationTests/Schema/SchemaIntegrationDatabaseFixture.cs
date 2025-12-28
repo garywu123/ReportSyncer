@@ -3,11 +3,12 @@ using DotNetToolkit.Database.Configuration;
 using DotNetToolkit.Database.Internal;
 using DotNetToolkit.Database.Services;
 using Microsoft.Data.SqlClient;
-using System.Text.RegularExpressions;
+using System.IO;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using ReportSyncer.Core.Tests.IntegrationTests.Common;
 
 namespace ReportSyncer.Core.Tests.IntegrationTests.Schema;
 
@@ -17,80 +18,39 @@ public sealed class SchemaIntegrationCollection : ICollectionFixture<SchemaInteg
 // ReSharper disable once ClassNeverInstantiated.Global
 public sealed class SchemaIntegrationDatabaseFixture : IAsyncLifetime
 {
-    public string? SkipReason       { get; private set; }
+    public string? SkipReason { get; private set; }
     public string? ConnectionString { get; private set; }
-    // ReSharper disable once MemberCanBePrivate.Global
-    public string? DatabaseName     { get; private set; }
+    public string? DatabaseName { get; private set; }
+    private string? _baseConnectionString;
 
     public async Task InitializeAsync()
     {
-        var baseConn = Environment.GetEnvironmentVariable("REPORTSYNCER_TEST_SQL_CONN");
-
-        Console.WriteLine($"[DEBUG] Connection String Source: {baseConn ?? "NULL"}");
-        Console.WriteLine($"[DEBUG] Process ID: {Environment.ProcessId}");
-
-        if (string.IsNullOrWhiteSpace(baseConn))
+        _baseConnectionString = SqlIntegrationTestHelper.RequireBaseConnection("REPORTSYNCER_TEST_SQL_CONN", "SchemaIntegration", out var skipReason);
+        if (_baseConnectionString is null)
         {
-            SkipReason = "Set REPORTSYNCER_TEST_SQL_CONN to run schema integration tests.";
+            SkipReason = skipReason;
             return;
         }
 
         DatabaseName = $"ReportSyncer_Schema_IT_{Guid.NewGuid():N}";
-        var masterConn = $"{baseConn};Initial Catalog=master";
-        await using var conn = new SqlConnection(masterConn);
-        await conn.OpenAsync();
-        await using var create = new SqlCommand($"CREATE DATABASE [{DatabaseName}];", conn);
-        await create.ExecuteNonQueryAsync();
-        ConnectionString = $"{baseConn};Initial Catalog={DatabaseName}";
+        await SqlIntegrationTestHelper.CreateDatabaseAsync(_baseConnectionString, DatabaseName);
+        ConnectionString = $"{_baseConnectionString};Initial Catalog={DatabaseName}";
 
-        // Execute the schema seed script (runs once per fixture instance)
-        var seedPath = FindSeedScriptPath() ?? throw new InvalidOperationException("Schema seed script not found in output. Ensure SchemaSeed.sql is copied to test output.");
-        await ExecuteSqlScriptAsync(seedPath);
-    }
+        var seedPath = SqlIntegrationTestHelper.FindSeedScript(
+            AppContext.BaseDirectory ?? Directory.GetCurrentDirectory(),
+            Path.Combine("IntegrationTests", "Schema", "SchemaSeed.sql"),
+            "SchemaSeed.sql",
+            Path.Combine(Directory.GetCurrentDirectory(), "IntegrationTests", "Schema", "SchemaSeed.sql"))
+            ?? throw new InvalidOperationException("Schema seed script not found in output. Ensure SchemaSeed.sql is copied to test output.");
 
-    private string? FindSeedScriptPath()
-    {
-        var baseDir = AppContext.BaseDirectory ?? Directory.GetCurrentDirectory();
-        var candidates = new[]
-        {
-            Path.Combine(baseDir, "IntegrationTests", "Schema", "SchemaSeed.sql"),
-            Path.Combine(baseDir, "SchemaSeed.sql"),
-            Path.Combine(Directory.GetCurrentDirectory(), "IntegrationTests", "Schema", "SchemaSeed.sql")
-        };
-
-        return candidates.FirstOrDefault(File.Exists);
-    }
-
-    private async Task ExecuteSqlScriptAsync(string path)
-    {
-        if (ConnectionString is null) throw new InvalidOperationException("Fixture not initialized.");
-        var sql = await File.ReadAllTextAsync(path);
-
-        // Split batches on GO lines
-        var batches = Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-
-        await using var conn = new SqlConnection(ConnectionString);
-        await conn.OpenAsync();
-
-        foreach (var batch in batches)
-        {
-            var text = batch?.Trim();
-            if (string.IsNullOrWhiteSpace(text)) continue;
-            await using var cmd = new SqlCommand(text, conn);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await SqlIntegrationTestHelper.ExecuteScriptAsync(ConnectionString, seedPath);
     }
 
     public async Task DisposeAsync()
     {
         if (string.IsNullOrEmpty(DatabaseName)) return;
-        var masterConn = ConnectionString?.Replace($"Initial Catalog={DatabaseName}", "Initial Catalog=master");
-        await using var conn = new SqlConnection(masterConn);
-        await conn.OpenAsync();
-        await using var drop = new SqlCommand(
-            $"ALTER DATABASE [{DatabaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{DatabaseName}];", conn);
-        await drop.ExecuteNonQueryAsync();
-        SqlConnection.ClearAllPools();
+        if (_baseConnectionString is null) return;
+        await SqlIntegrationTestHelper.DropDatabaseAsync(_baseConnectionString, DatabaseName);
     }
 
     public async Task ExecuteNonQueryAsync(string sql)

@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
-using System.Text.RegularExpressions;
+using ReportSyncer.Core.Tests.IntegrationTests.Common;
+using System.IO;
 using Xunit;
 
 namespace ReportSyncer.Core.Tests.IntegrationTests.Observability;
@@ -11,21 +12,21 @@ public sealed class WorkEstimatorIntegrationDatabaseFixture : IAsyncLifetime
 {
     public string? SkipReason { get; private set; }
     public string? ConnectionString { get; private set; }
+    private string? _baseConnectionString;
 
     public async Task InitializeAsync()
     {
-        var baseConn = Environment.GetEnvironmentVariable("REPORTSYNCER_TEST_SQL_CONN");
-        if (string.IsNullOrWhiteSpace(baseConn))
+        _baseConnectionString = SqlIntegrationTestHelper.RequireBaseConnection("REPORTSYNCER_TEST_SQL_CONN", "WorkEstimatorIntegration", out var skipReason);
+        if (_baseConnectionString is null)
         {
-            SkipReason = "Set REPORTSYNCER_TEST_SQL_CONN to run WorkEstimator integration tests.";
-            Console.WriteLine($"[WorkEstimatorIntegration] {SkipReason}");
+            SkipReason = skipReason;
             return;
         }
 
         try
         {
-            await ExecuteSeedAsync(baseConn);
-            ConnectionString = $"{baseConn};Initial Catalog=ReportSyncer_EstimatorDb";
+            await ExecuteSeedAsync(_baseConnectionString);
+            ConnectionString = $"{_baseConnectionString};Initial Catalog=ReportSyncer_EstimatorDb";
         }
         catch (Exception ex)
         {
@@ -38,54 +39,21 @@ public sealed class WorkEstimatorIntegrationDatabaseFixture : IAsyncLifetime
     {
         await using var conn = new SqlConnection($"{baseConn};Initial Catalog=master");
         await conn.OpenAsync();
-        var seedPath = FindSeedScriptPath() ?? throw new InvalidOperationException("WorkEstimatorSeed.sql not found in output.");
-        var sql = await File.ReadAllTextAsync(seedPath);
-        var batches = Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+        var seedPath = SqlIntegrationTestHelper.FindSeedScript(
+            AppContext.BaseDirectory ?? Directory.GetCurrentDirectory(),
+            Path.Combine("IntegrationTests", "Observability", "WorkEstimatorSeed.sql"),
+            "WorkEstimatorSeed.sql",
+            Path.Combine(Directory.GetCurrentDirectory(), "IntegrationTests", "Observability", "WorkEstimatorSeed.sql"))
+            ?? throw new InvalidOperationException("WorkEstimatorSeed.sql not found in output.");
 
-        foreach (var batch in batches)
-        {
-            var text = batch?.Trim();
-            if (string.IsNullOrWhiteSpace(text)) continue;
-            try
-            {
-                await using var cmd = new SqlCommand(text, conn);
-                await cmd.ExecuteNonQueryAsync();
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Failed executing seed batch: {text}", ex);
-            }
-        }
-    }
-
-    private static string? FindSeedScriptPath()
-    {
-        var baseDir = AppContext.BaseDirectory ?? Directory.GetCurrentDirectory();
-        var candidates = new[]
-        {
-            Path.Combine(baseDir, "IntegrationTests", "Observability", "WorkEstimatorSeed.sql"),
-            Path.Combine(baseDir, "WorkEstimatorSeed.sql"),
-            Path.Combine(Directory.GetCurrentDirectory(), "IntegrationTests", "Observability", "WorkEstimatorSeed.sql")
-        };
-
-        return candidates.FirstOrDefault(File.Exists);
+        await SqlIntegrationTestHelper.ExecuteScriptAsync($"{baseConn};Initial Catalog=master", seedPath);
     }
 
     public async Task DisposeAsync()
     {
         if (ConnectionString is null) return;
-
-        await using var conn = new SqlConnection(ConnectionString.Replace("Initial Catalog=ReportSyncer_EstimatorDb", "Initial Catalog=master"));
-        await conn.OpenAsync();
-        var drop = """
-                   IF DB_ID('ReportSyncer_EstimatorDb') IS NOT NULL
-                   BEGIN
-                       ALTER DATABASE [ReportSyncer_EstimatorDb] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-                       DROP DATABASE [ReportSyncer_EstimatorDb];
-                   END;
-                   """;
-        await using var cmd = new SqlCommand(drop, conn);
-        await cmd.ExecuteNonQueryAsync();
+        if (_baseConnectionString is null) return;
+        await SqlIntegrationTestHelper.DropDatabaseAsync(_baseConnectionString, "ReportSyncer_EstimatorDb");
         SqlConnection.ClearAllPools();
     }
 }

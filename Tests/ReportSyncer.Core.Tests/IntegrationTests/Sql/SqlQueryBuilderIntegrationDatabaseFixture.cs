@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
-using System.Text.RegularExpressions;
+using ReportSyncer.Core.Tests.IntegrationTests.Common;
+using System.IO;
 using Xunit;
 
 namespace ReportSyncer.Core.Tests.IntegrationTests.Sql;
@@ -16,15 +17,18 @@ public sealed class SqlQueryBuilderIntegrationDatabaseFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var baseConn = Environment.GetEnvironmentVariable("REPORTSYNCER_TEST_SQL_CONN")
-                       ?? "Server=(localdb)\\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=True";
+        BaseConnectionString = SqlIntegrationTestHelper.RequireBaseConnection("REPORTSYNCER_TEST_SQL_CONN", "SqlQueryBuilderIntegration", out var skipReason);
+        if (BaseConnectionString is null)
+        {
+            SkipReason = skipReason;
+            return;
+        }
 
         try
         {
-            await CreateDatabasesAsync(baseConn);
-            BaseConnectionString = baseConn;
-            SourceConnectionString = $"{baseConn};Initial Catalog=ReportSyncer_SourceApp";
-            TargetConnectionString = $"{baseConn};Initial Catalog=ReportSyncer_TargetRpt";
+            await CreateDatabasesAsync(BaseConnectionString);
+            SourceConnectionString = $"{BaseConnectionString};Initial Catalog=ReportSyncer_SourceApp";
+            TargetConnectionString = $"{BaseConnectionString};Initial Catalog=ReportSyncer_TargetRpt";
         }
         catch (Exception ex)
         {
@@ -37,30 +41,14 @@ public sealed class SqlQueryBuilderIntegrationDatabaseFixture : IAsyncLifetime
         await using var conn = new SqlConnection($"{baseConn};Initial Catalog=master");
         await conn.OpenAsync();
 
-        var seedPath = FindSeedScriptPath() ?? throw new InvalidOperationException("QueryBuilderSeed.sql not found in output.");
-        var sql = await File.ReadAllTextAsync(seedPath);
-        var batches = Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+        var seedPath = SqlIntegrationTestHelper.FindSeedScript(
+            AppContext.BaseDirectory ?? Directory.GetCurrentDirectory(),
+            Path.Combine("IntegrationTests", "Sql", "QueryBuilderSeed.sql"),
+            "QueryBuilderSeed.sql",
+            Path.Combine(Directory.GetCurrentDirectory(), "IntegrationTests", "Sql", "QueryBuilderSeed.sql"))
+            ?? throw new InvalidOperationException("QueryBuilderSeed.sql not found in output.");
 
-        foreach (var batch in batches)
-        {
-            var text = batch?.Trim();
-            if (string.IsNullOrWhiteSpace(text)) continue;
-            await using var cmd = new SqlCommand(text, conn);
-            await cmd.ExecuteNonQueryAsync();
-        }
-    }
-
-    private static string? FindSeedScriptPath()
-    {
-        var baseDir = AppContext.BaseDirectory ?? Directory.GetCurrentDirectory();
-        var candidates = new[]
-        {
-            Path.Combine(baseDir, "IntegrationTests", "Sql", "QueryBuilderSeed.sql"),
-            Path.Combine(baseDir, "QueryBuilderSeed.sql"),
-            Path.Combine(Directory.GetCurrentDirectory(), "IntegrationTests", "Sql", "QueryBuilderSeed.sql")
-        };
-
-        return candidates.FirstOrDefault(File.Exists);
+        await SqlIntegrationTestHelper.ExecuteScriptAsync($"{baseConn};Initial Catalog=master", seedPath);
     }
 
     public async Task DisposeAsync()
@@ -74,16 +62,7 @@ public sealed class SqlQueryBuilderIntegrationDatabaseFixture : IAsyncLifetime
 
     private async Task DropDatabaseAsync(string name)
     {
-        await using var conn = new SqlConnection($"{BaseConnectionString};Initial Catalog=master");
-        await conn.OpenAsync();
-        var sql = $"""
-                   IF DB_ID('{name}') IS NOT NULL
-                   BEGIN
-                       ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-                       DROP DATABASE [{name}];
-                   END;
-                   """;
-        await using var cmd = new SqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
+        if (BaseConnectionString is null) return;
+        await SqlIntegrationTestHelper.DropDatabaseAsync(BaseConnectionString, name);
     }
 }
