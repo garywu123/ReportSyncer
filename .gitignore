@@ -62,4 +62,8 @@ TestResults/
 # OS files
 .DS_Store
 Thumbs.db
-.repomix/output/*.*
+.repomix/*/*.*
+.repomix/*.*
+
+# AI context files
+docs/ImplementationSteps/*/*.md

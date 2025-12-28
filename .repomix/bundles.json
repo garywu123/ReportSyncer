@@ -36,13 +36,19 @@
     "Full-Core-857": {
       "name": "Full-Core",
       "created": "2025-12-24T06:56:47.663Z",
-      "lastUsed": "2025-12-24T11:47:09.035Z",
+      "lastUsed": "2025-12-28T07:04:44.031Z",
       "tags": [],
       "files": [
         "ReportSyncer.Core/Exceptions",
         "ReportSyncer.Core/Schema",
         "ReportSyncer.Core/Configuration",
-        "ReportSyncer.Core/ReportSyncer.Core.csproj"
+        "ReportSyncer.Core/ReportSyncer.Core.csproj",
+        "ReportSyncer.Core/Observability",
+        "ReportSyncer.Core/Sync",
+        "Tests/ReportSyncer.Core.Tests/IntegrationTests",
+        "Tests/ReportSyncer.Core.Tests/Helpers",
+        "Tests/ReportSyncer.Core.Tests/Observability",
+        "Tests/ReportSyncer.Core.Tests/UnitTests"
       ],
       "configPath": ".repomix/config/Full-Core-repomix.config.json"
     }
