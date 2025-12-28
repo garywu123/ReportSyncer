@@ -44,11 +44,7 @@
         "ReportSyncer.Core/Configuration",
         "ReportSyncer.Core/ReportSyncer.Core.csproj",
         "ReportSyncer.Core/Observability",
-        "ReportSyncer.Core/Sync",
-        "Tests/ReportSyncer.Core.Tests/IntegrationTests",
-        "Tests/ReportSyncer.Core.Tests/Helpers",
-        "Tests/ReportSyncer.Core.Tests/Observability",
-        "Tests/ReportSyncer.Core.Tests/UnitTests"
+        "ReportSyncer.Core/Sync"
       ],
       "configPath": ".repomix/config/Full-Core-repomix.config.json"
     }
