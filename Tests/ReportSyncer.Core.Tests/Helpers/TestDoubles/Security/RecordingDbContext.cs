@@ -1,3 +1,4 @@
+#pragma warning disable CS8767 // Nullability of reference types in type of parameter doesn't match implicitly implemented member (possibly because of nullability attributes).
 using System.Data;
 using DotNetToolkit.Database.Abstractions;
 
@@ -43,6 +44,7 @@ internal sealed class RecordingDbContext : IDbContext
     public void Dispose() { }
 }
 
+#pragma warning disable CS8767
 internal sealed class RecordingCommand : IDbCommandWrapper
 {
     public RecordingCommand(string commandText, CommandType commandType)
@@ -72,6 +74,7 @@ internal sealed class RecordingCommand : IDbCommandWrapper
 
     public T GetParameterValue<T>(string name) => default!;
 
+    #pragma warning disable CS8767
     private sealed class RecordingParameter : IDbDataParameter
     {
         public byte Precision { get; set; }
@@ -80,7 +83,9 @@ internal sealed class RecordingCommand : IDbCommandWrapper
         public DbType DbType { get; set; }
         public ParameterDirection Direction { get; set; }
         public bool IsNullable { get; set; }
+
         public string ParameterName { get; set; } = string.Empty;
+
         public string SourceColumn { get; set; } = string.Empty;
         public DataRowVersion SourceVersion { get; set; }
         public object? Value { get; set; }
