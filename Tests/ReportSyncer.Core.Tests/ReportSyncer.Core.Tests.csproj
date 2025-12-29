@@ -60,6 +60,9 @@
     <None Include="IntegrationTests\Security\PermissionProfilerSeed.sql">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="IntegrationTests\Sync\TableRunnerSeed.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="IntegrationTests\Sync\SqlDataWriterSeed.sql">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
