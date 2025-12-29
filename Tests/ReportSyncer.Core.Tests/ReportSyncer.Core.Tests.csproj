@@ -60,6 +60,9 @@
     <None Include="IntegrationTests\Security\PermissionProfilerSeed.sql">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="IntegrationTests\Sync\SqlDataWriterSeed.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
@@ -67,6 +70,7 @@
     <Folder Include="IntegrationTests\Sql\" />
     <Folder Include="IntegrationTests\Observability\" />
     <Folder Include="IntegrationTests\Security\" />
+    <Folder Include="IntegrationTests\Sync\" />
   </ItemGroup>
 
 </Project>

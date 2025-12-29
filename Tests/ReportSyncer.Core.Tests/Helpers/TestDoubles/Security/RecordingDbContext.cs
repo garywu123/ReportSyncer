@@ -55,12 +55,35 @@ internal sealed class RecordingCommand : IDbCommandWrapper
 
     public CommandType CommandType { get; }
 
-    public IEnumerable<IDbDataParameter> Parameters => Array.Empty<IDbDataParameter>();
+    private readonly List<IDbDataParameter> _parameters = new();
+
+    public IEnumerable<IDbDataParameter> Parameters => _parameters;
 
     public void AddParameter(string name, object value, DbType type, ParameterDirection direction = ParameterDirection.Input)
     {
-        // Parameters are not required for permission probes in current tests.
+        _parameters.Add(new RecordingParameter
+        {
+            ParameterName = name,
+            Value = value,
+            DbType = type,
+            Direction = direction
+        });
     }
 
     public T GetParameterValue<T>(string name) => default!;
+
+    private sealed class RecordingParameter : IDbDataParameter
+    {
+        public byte Precision { get; set; }
+        public byte Scale { get; set; }
+        public int Size { get; set; }
+        public DbType DbType { get; set; }
+        public ParameterDirection Direction { get; set; }
+        public bool IsNullable { get; set; }
+        public string ParameterName { get; set; } = string.Empty;
+        public string SourceColumn { get; set; } = string.Empty;
+        public DataRowVersion SourceVersion { get; set; }
+        public object? Value { get; set; }
+        public bool SourceColumnNullMapping { get; set; }
+    }
 }
