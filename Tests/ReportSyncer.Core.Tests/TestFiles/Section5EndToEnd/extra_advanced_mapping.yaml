@@ -1,0 +1,59 @@
+## Extra: Advanced column mapping demo (rename, const, parameter, ignore).
+version: "1.0"
+run:
+  dryRun: false
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: false
+  requireDifferentConnections: false
+  confirmLargeDeletePct: 0.80
+schemaPolicy:
+  onMismatch: "Fail"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: true
+connections:
+  - name: "LocalSource"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+  - name: "LocalTarget"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "extra_advanced_mapping"
+    sourceConnection: "LocalSource"
+    targetConnection: "LocalTarget"
+    parameters:
+      ProcessingDate: "2025-12-28"
+      BatchId: "BATCH-001"
+    tables:
+      - source: "rs_src.Child"
+        target: "rs_tgt.Child"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: false
+        filter:
+          keyColumn: "ParentId"
+          value: 1
+        columnMapping:
+          automapByName: true
+          mappings:
+            ChildId:
+              fromSource: "ChildId"
+            LineCode:
+              fromSource: "LineCode"
+            Amount:
+              fromSource: "Amount"
+            ProcessedDate:
+              fromParameter: "ProcessingDate"
+            BatchTag:
+              fromParameter: "BatchId"
+            InternalNote:
+              const: "ADVANCED_MAP"
+            IgnoreMe:
+              ignore: true
+        keys:
+          businessKey: ["ChildId"]

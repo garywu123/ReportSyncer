@@ -1,0 +1,52 @@
+## IT2: Real run overwrite; run twice to verify idempotent behavior.
+version: "1.0"
+run:
+  dryRun: false
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: false
+  requireDifferentConnections: false
+  confirmLargeDeletePct: 0.80
+schemaPolicy:
+  onMismatch: "Fail"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: true
+connections:
+  - name: "LocalSource"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+  - name: "LocalTarget"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "it2_overwrite_parent_child"
+    sourceConnection: "LocalSource"
+    targetConnection: "LocalTarget"
+    parameters:
+      ParentBizKey: "P-1"
+      ParentId: 1
+    tables:
+      - source: "rs_src.Parent"
+        target: "rs_tgt.Parent"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: false
+        filter:
+          keyColumn: "BizKey"
+          value: "{ParentBizKey}"
+        columnMapping:
+          automapByName: true
+      - source: "rs_src.Child"
+        target: "rs_tgt.Child"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: false
+        filter:
+          keyColumn: "ParentId"
+          value: "{ParentId}"
+        columnMapping:
+          automapByName: true

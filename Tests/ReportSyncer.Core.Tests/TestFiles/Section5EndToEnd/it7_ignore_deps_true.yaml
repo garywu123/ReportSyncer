@@ -1,0 +1,40 @@
+## IT7: ignoreDependencies=true allows plan; runtime fails if parent missing.
+version: "1.0"
+run:
+  dryRun: true
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: false
+  requireDifferentConnections: false
+  confirmLargeDeletePct: 0.80
+schemaPolicy:
+  onMismatch: "Fail"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: true
+connections:
+  - name: "LocalSource"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+  - name: "LocalTarget"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "it7_ignore_dependencies_true"
+    sourceConnection: "LocalSource"
+    targetConnection: "LocalTarget"
+    tables:
+      - source: "rs_src.Child"
+        target: "rs_tgt.Child"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: false
+        ignoreDependencies: true
+        filter:
+          keyColumn: "ParentId"
+          value: 999999  # parent expected missing
+        columnMapping:
+          automapByName: true

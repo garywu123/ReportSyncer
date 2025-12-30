@@ -1,0 +1,36 @@
+## IT5: Safety latch - preSyncTargetAction without filter must set allowAllDelete=true.
+version: "1.0"
+run:
+  dryRun: false
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: false
+  requireDifferentConnections: false
+  confirmLargeDeletePct: 0.80
+schemaPolicy:
+  onMismatch: "Fail"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: true
+connections:
+  - name: "LocalSource"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+  - name: "LocalTarget"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "it5_safety_filter_required"
+    sourceConnection: "LocalSource"
+    targetConnection: "LocalTarget"
+    tables:
+      - source: "rs_src.Parent"
+        target: "rs_tgt.Parent"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: false  # expected to block because filter is null
+        columnMapping:
+          automapByName: true

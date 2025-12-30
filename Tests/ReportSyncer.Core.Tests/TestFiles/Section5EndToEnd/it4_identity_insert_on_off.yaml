@@ -1,0 +1,49 @@
+## IT4: Identity insert ON vs OFF for rs_test.IdentityDemo.
+version: "1.0"
+run:
+  dryRun: false
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: false
+  requireDifferentConnections: false
+  confirmLargeDeletePct: 0.80
+schemaPolicy:
+  onMismatch: "Fail"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: true
+connections:
+  - name: "LocalSource"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+  - name: "LocalTarget"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "it4_identity_insert_on"
+    sourceConnection: "LocalSource"
+    targetConnection: "LocalTarget"
+    tables:
+      - source: "rs_src.IdentityDemo"
+        target: "rs_tgt.IdentityDemo"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: true
+        enableIdentityInsert: true
+        columnMapping:
+          automapByName: true
+  - name: "it4_identity_insert_off"
+    sourceConnection: "LocalSource"
+    targetConnection: "LocalTarget"
+    tables:
+      - source: "rs_src.IdentityDemo"
+        target: "rs_tgt.IdentityDemo"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: true
+        enableIdentityInsert: false
+        columnMapping:
+          automapByName: true

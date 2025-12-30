@@ -1,0 +1,43 @@
+## Extra: Date-range-only filter on Child.
+version: "1.0"
+run:
+  dryRun: false
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: false
+  requireDifferentConnections: false
+  confirmLargeDeletePct: 0.80
+schemaPolicy:
+  onMismatch: "Fail"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: true
+connections:
+  - name: "LocalSource"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+  - name: "LocalTarget"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "extra_date_range_only"
+    sourceConnection: "LocalSource"
+    targetConnection: "LocalTarget"
+    parameters:
+      StartDate: "2025-01-01"
+      EndDate: "2025-01-31"
+    tables:
+      - source: "rs_src.Child"
+        target: "rs_tgt.Child"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: false
+        filter:
+          dateColumn: "CreatedOn"
+          startDate: "{StartDate}"
+          endDate: "{EndDate}"
+        columnMapping:
+          automapByName: true

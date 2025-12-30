@@ -1,0 +1,36 @@
+## IT6: Large delete guard triggers confirmation/blocked when threshold exceeded.
+version: "1.0"
+run:
+  dryRun: false
+  defaultBatchSize: 500
+  deleteChunkSize: 200
+  useTvpIfAvailable: true
+safety:
+  forbidProdToProd: false
+  requireDifferentConnections: false
+  confirmLargeDeletePct: 0.01
+schemaPolicy:
+  onMismatch: "Fail"
+  requirePrimaryKey: true
+  allowExtraTargetColumns: true
+connections:
+  - name: "LocalSource"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+  - name: "LocalTarget"
+    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    environment: "Dev"
+    type: "Reporting"
+syncJobs:
+  - name: "it6_large_delete_block"
+    sourceConnection: "LocalSource"
+    targetConnection: "LocalTarget"
+    tables:
+      - source: "rs_src.Child"
+        target: "rs_tgt.Child"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: true   # full-table delete path
+        columnMapping:
+          automapByName: true
