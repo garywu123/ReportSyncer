@@ -13,6 +13,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Exceptions;
+using ReportSyncer.Core.Schema;
+using ReportSyncer.Core.Schema.Dependency;
+using ReportSyncer.Core.Schema.Mapping;
+using ReportSyncer.Core.Observability;
 using ReportSyncer.Core.Sync.Contracts;
 
 namespace ReportSyncer.Core.Sync;
@@ -25,17 +29,25 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
 {
     private readonly IConfigurationProvider _configurationProvider;
     private readonly IPreFlightValidator _preFlightValidator;
+    private readonly ITableRunner _tableRunner;
+    private readonly IJobProgressReporter _progress;
     /// <summary>
     /// Initializes a new instance of the <see cref="SyncOrchestrator"/> class.
     /// </summary>
     /// <param name="configurationProvider">Provides configuration loading and validation.</param>
     /// <param name="preFlightValidator">Validates jobs before execution.</param>
+    /// <param name="tableRunner">Executes per-table delete/insert phases.</param>
+    /// <param name="progressReporter">Optional progress reporter sink.</param>
     public SyncOrchestrator(
         IConfigurationProvider configurationProvider,
-        IPreFlightValidator preFlightValidator)
+        IPreFlightValidator preFlightValidator,
+        ITableRunner tableRunner,
+        IJobProgressReporter? progressReporter = null)
     {
         _configurationProvider = configurationProvider ?? throw new ArgumentNullException(nameof(configurationProvider));
         _preFlightValidator = preFlightValidator ?? throw new ArgumentNullException(nameof(preFlightValidator));
+        _tableRunner = tableRunner ?? throw new ArgumentNullException(nameof(tableRunner));
+        _progress = progressReporter ?? NullJobProgressReporter.Instance;
     }
 
     /// <summary>
@@ -71,35 +83,125 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
         ct.ThrowIfCancellationRequested();
 
         var startedAt = DateTimeOffset.UtcNow;
+        _progress.Report(new JobProgressEvent(jobName, ProgressEventKind.Started, ProgressPhase.Preflight, startedAt));
 
-        var effectiveConfig = await _configurationProvider
-            .LoadAndValidateAsync(configPath, overrides, ct)
-            .ConfigureAwait(false);
-
-        var job = effectiveConfig.SyncJobs.FirstOrDefault(j =>
-            string.Equals(j.Name, jobName, StringComparison.OrdinalIgnoreCase)) ?? throw new ConfigurationException(
-                string.Format(CultureInfo.InvariantCulture, "Job '{0}' was not found in configuration.", jobName));
-
-        var preFlight = await _preFlightValidator
-            .ValidateAsync(effectiveConfig, job, ct)
-            .ConfigureAwait(false);
-
-        var dryRun = preFlight.DryRun;
-        if (dryRun)
+        try
         {
-            var tableResults = job.Tables
-                .Select(t => new TableResult(t.Target, TableStatus.SkippedDryRun))
-                .ToArray();
+            var effectiveConfig = await _configurationProvider
+                .LoadAndValidateAsync(configPath, overrides, ct)
+                .ConfigureAwait(false);
 
+            var job = effectiveConfig.SyncJobs.FirstOrDefault(j =>
+                string.Equals(j.Name, jobName, StringComparison.OrdinalIgnoreCase)) ?? throw new ConfigurationException(
+                    string.Format(CultureInfo.InvariantCulture, "Job '{0}' was not found in configuration.", jobName));
+
+            var preFlight = await _preFlightValidator
+                .ValidateAsync(effectiveConfig, job, ct)
+                .ConfigureAwait(false);
+            _progress.Report(new JobProgressEvent(job.Name, ProgressEventKind.Completed, ProgressPhase.Preflight, DateTimeOffset.UtcNow, Elapsed: DateTimeOffset.UtcNow - startedAt));
+
+            var dryRun = preFlight.DryRun;
+            if (dryRun)
+            {
+                var tableResults = job.Tables
+                    .Select(t => new TableResult(t.Target, TableStatus.SkippedDryRun))
+                    .ToArray();
+                _progress.Report(new JobProgressEvent(job.Name, ProgressEventKind.Completed, ProgressPhase.Execution, DateTimeOffset.UtcNow, Elapsed: DateTimeOffset.UtcNow - startedAt, Message: "Dry-run"));
+
+                return new JobResult(
+                    job.Name,
+                    JobStatus.SkippedDryRun,
+                    dryRun: true,
+                    startedAtUtc: startedAt,
+                    finishedAtUtc: DateTimeOffset.UtcNow,
+                    tables: tableResults);
+            }
+
+            var execStarted = DateTimeOffset.UtcNow;
+            _progress.Report(new JobProgressEvent(job.Name, ProgressEventKind.Started, ProgressPhase.Execution, execStarted));
+
+            var results = new List<TableResult>();
+
+            foreach (var tableId in preFlight.Schema.ExecutionPlan.DeleteOrder)
+            {
+                var ctx = BuildTableExecutionContext(job, tableId, effectiveConfig, preFlight);
+                var tableResult = await _tableRunner.RunPhaseAsync(ctx, SyncPhase.Delete, ct).ConfigureAwait(false);
+                results.Add(tableResult);
+            }
+
+            foreach (var tableId in preFlight.Schema.ExecutionPlan.InsertOrder)
+            {
+                var ctx = BuildTableExecutionContext(job, tableId, effectiveConfig, preFlight);
+                var tableResult = await _tableRunner.RunPhaseAsync(ctx, SyncPhase.Insert, ct).ConfigureAwait(false);
+                results.Add(tableResult);
+            }
+
+            _progress.Report(new JobProgressEvent(job.Name, ProgressEventKind.Completed, ProgressPhase.Execution, DateTimeOffset.UtcNow, Elapsed: DateTimeOffset.UtcNow - execStarted));
             return new JobResult(
                 job.Name,
-                JobStatus.SkippedDryRun,
-                dryRun: true,
+                JobStatus.Succeeded,
+                dryRun: false,
                 startedAtUtc: startedAt,
                 finishedAtUtc: DateTimeOffset.UtcNow,
-                tables: tableResults);
+                tables: results.AsReadOnly());
+        }
+        catch (OperationCanceledException)
+        {
+            _progress.Report(new JobProgressEvent(jobName, ProgressEventKind.Failed, ProgressPhase.Execution, DateTimeOffset.UtcNow, Elapsed: DateTimeOffset.UtcNow - startedAt, ErrorMessage: "Cancelled"));
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _progress.Report(new JobProgressEvent(jobName, ProgressEventKind.Failed, ProgressPhase.Execution, DateTimeOffset.UtcNow, Elapsed: DateTimeOffset.UtcNow - startedAt, ErrorMessage: ex.Message));
+            throw;
+        }
+    }
+
+    private static TableExecutionContext BuildTableExecutionContext(
+        SyncJobConfig job,
+        TableIdentifier targetTableId,
+        SyncConfiguration config,
+        PreFlightResult preFlight)
+    {
+        var tableTask = job.Tables.FirstOrDefault(t =>
+            string.Equals(t.Target, targetTableId.ToString(), StringComparison.OrdinalIgnoreCase));
+
+        tableTask ??= job.Tables.FirstOrDefault(t =>
+            string.Equals(TableIdentifier.Parse(t.Target).TableName, targetTableId.TableName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(TableIdentifier.Parse(t.Target).SchemaName, targetTableId.SchemaName, StringComparison.OrdinalIgnoreCase));
+
+        if (tableTask is null)
+        {
+            throw new SyncExecutionException($"Table task for target '{targetTableId}' was not found.");
         }
 
-        throw new SyncExecutionException("Execution engine not implemented. Implement Section 5.");
+        if (!preFlight.Schema.Mapping.TableMappings.TryGetValue(targetTableId, out var mapping))
+        {
+            throw new SyncExecutionException($"Mapping for target '{targetTableId}' was not found.");
+        }
+
+        var sourceId = TableIdentifier.Parse(tableTask.Source);
+        var targetId = TableIdentifier.Parse(tableTask.Target);
+
+        return new TableExecutionContext(
+            Guid.NewGuid(),
+            job.Name,
+            job.SourceConnection,
+            job.TargetConnection,
+            DatabaseType.SqlServer,
+            DatabaseType.SqlServer,
+            sourceId.SchemaName,
+            sourceId.TableName,
+            targetId.SchemaName,
+            targetId.TableName,
+            dryRun: config.Run.DryRun,
+            preSyncTargetDelete: tableTask.PreSyncTargetAction,
+            enableIdentityInsert: tableTask.EnableIdentityInsert,
+            contextColumnName: null,
+            contextValue: null,
+            filters: Array.Empty<FilterPredicate>(),
+            mapping,
+            preFlight.Schema.ExecutionPlan,
+            config.Run.DefaultBatchSize);
     }
 }

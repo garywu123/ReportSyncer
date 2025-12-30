@@ -11,6 +11,7 @@ using DotNetToolkit.Database.Abstractions;
 using ReportSyncer.Core.Exceptions;
 using ReportSyncer.Core.Schema;
 using ReportSyncer.Core.Schema.Mapping;
+using ReportSyncer.Core.Observability;
 using ReportSyncer.Core.Sync.Contracts;
 using ReportSyncer.Core.Sync.Sql;
 
@@ -24,15 +25,18 @@ public sealed class TableRunner : ITableRunner
     private readonly IDbConnectionFactory _sourceConnectionFactory;
     private readonly IDataWriter _writer;
     private readonly ISqlQueryBuilder _sqlBuilder;
+    private readonly IJobProgressReporter _progress;
 
     public TableRunner(
         IDbConnectionFactory sourceConnectionFactory,
         IDataWriter writer,
-        ISqlQueryBuilder sqlBuilder)
+        ISqlQueryBuilder sqlBuilder,
+        IJobProgressReporter? progressReporter = null)
     {
         _sourceConnectionFactory = sourceConnectionFactory ?? throw new ArgumentNullException(nameof(sourceConnectionFactory));
         _writer = writer ?? throw new ArgumentNullException(nameof(writer));
         _sqlBuilder = sqlBuilder ?? throw new ArgumentNullException(nameof(sqlBuilder));
+        _progress = progressReporter ?? NullJobProgressReporter.Instance;
     }
 
     /// <inheritdoc />
@@ -93,6 +97,122 @@ public sealed class TableRunner : ITableRunner
         {
             throw new SyncExecutionException(BuildErrorMessage(ctx, phase), ex);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<TableResult> RunPhaseAsync(TableExecutionContext ctx, SyncPhase phase, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        ct.ThrowIfCancellationRequested();
+
+        if (phase == SyncPhase.Delete)
+        {
+            var startedAt = DateTimeOffset.UtcNow;
+            _progress.Report(new TableProgressEvent(
+                ctx.JobName,
+                TableIdentifier.Parse($"{ctx.TargetSchema}.{ctx.TargetTable}"),
+                ProgressEventKind.Started,
+                SyncPhase.Delete,
+                startedAt,
+                IsDryRun: ctx.DryRun));
+
+            if (ctx.DryRun || !ctx.PreSyncTargetDelete)
+            {
+                _progress.Report(new TableProgressEvent(
+                    ctx.JobName,
+                    TableIdentifier.Parse($"{ctx.TargetSchema}.{ctx.TargetTable}"),
+                    ProgressEventKind.Skipped,
+                    SyncPhase.Delete,
+                    DateTimeOffset.UtcNow,
+                    Elapsed: DateTimeOffset.UtcNow - startedAt,
+                    RowsAffected: 0,
+                    IsDryRun: ctx.DryRun,
+                    Message: ctx.DryRun ? "Dry-run: delete skipped." : "Delete skipped by configuration."));
+
+                return new TableResult(
+                    ctx.TargetTable,
+                    ctx.DryRun ? TableStatus.SkippedDryRun : TableStatus.Succeeded,
+                    RowsDeleted: 0,
+                    RowsInserted: null,
+                    Duration: TimeSpan.Zero);
+            }
+
+            var started = DateTimeOffset.UtcNow;
+            try
+            {
+                var deleted = await _writer.DeleteAsync(ctx, ct).ConfigureAwait(false);
+                var finished = DateTimeOffset.UtcNow;
+                _progress.Report(new TableProgressEvent(
+                    ctx.JobName,
+                    TableIdentifier.Parse($"{ctx.TargetSchema}.{ctx.TargetTable}"),
+                    ProgressEventKind.Completed,
+                    SyncPhase.Delete,
+                    finished,
+                    Elapsed: finished - started,
+                    RowsAffected: deleted,
+                    IsDryRun: ctx.DryRun));
+
+                var duration = finished - started;
+                return new TableResult(ctx.TargetTable, TableStatus.Succeeded, RowsDeleted: deleted, Duration: duration);
+            }
+            catch (OperationCanceledException) { _progress.Report(BuildFailedEvent(ctx, SyncPhase.Delete, startedAt, "Cancelled")); throw; }
+            catch (SyncExecutionException ex) { _progress.Report(BuildFailedEvent(ctx, SyncPhase.Delete, startedAt, ex.Message)); throw new SyncExecutionException(BuildErrorMessage(ctx, "Delete"), ex); }
+            catch (Exception ex) { _progress.Report(BuildFailedEvent(ctx, SyncPhase.Delete, startedAt, ex.Message)); throw new SyncExecutionException(BuildErrorMessage(ctx, "Delete"), ex); }
+        }
+
+        if (phase == SyncPhase.Insert)
+        {
+            var started = DateTimeOffset.UtcNow;
+            _progress.Report(new TableProgressEvent(
+                ctx.JobName,
+                TableIdentifier.Parse($"{ctx.TargetSchema}.{ctx.TargetTable}"),
+                ProgressEventKind.Started,
+                SyncPhase.Insert,
+                started,
+                IsDryRun: ctx.DryRun));
+            try
+            {
+                if (ctx.DryRun)
+                {
+                    _progress.Report(new TableProgressEvent(
+                        ctx.JobName,
+                        TableIdentifier.Parse($"{ctx.TargetSchema}.{ctx.TargetTable}"),
+                        ProgressEventKind.Completed,
+                        SyncPhase.Insert,
+                        DateTimeOffset.UtcNow,
+                        Elapsed: DateTimeOffset.UtcNow - started,
+                        RowsAffected: 0,
+                        IsDryRun: true,
+                        Message: "Dry-run: no inserts executed."));
+
+                    return new TableResult(ctx.TargetTable, TableStatus.SkippedDryRun, RowsInserted: 0, Duration: TimeSpan.Zero);
+                }
+
+                var rows = await ReadSourceRowsAsync(ctx, ct).ConfigureAwait(false);
+                var inserted = rows.Count == 0
+                    ? 0
+                    : await _writer.InsertAsync(ctx, rows, ct).ConfigureAwait(false);
+
+                var finished = DateTimeOffset.UtcNow;
+                _progress.Report(new TableProgressEvent(
+                    ctx.JobName,
+                    TableIdentifier.Parse($"{ctx.TargetSchema}.{ctx.TargetTable}"),
+                    ProgressEventKind.Completed,
+                    SyncPhase.Insert,
+                    finished,
+                    Elapsed: finished - started,
+                    RowsAffected: inserted,
+                    IsDryRun: ctx.DryRun));
+
+                var duration = finished - started;
+                return new TableResult(ctx.TargetTable, TableStatus.Succeeded, RowsInserted: inserted, Duration: duration);
+            }
+            catch (OperationCanceledException) { _progress.Report(BuildFailedEvent(ctx, SyncPhase.Insert, started, "Cancelled")); throw; }
+            catch (SyncExecutionException ex) { _progress.Report(BuildFailedEvent(ctx, SyncPhase.Insert, started, ex.Message)); throw new SyncExecutionException(BuildErrorMessage(ctx, "Insert"), ex); }
+            catch (Exception ex) { _progress.Report(BuildFailedEvent(ctx, SyncPhase.Insert, started, ex.Message)); throw new SyncExecutionException(BuildErrorMessage(ctx, "Insert"), ex); }
+        }
+
+        throw new SyncExecutionException(BuildErrorMessage(ctx, phase.ToString()));
     }
 
     private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ReadSourceRowsAsync(
@@ -194,5 +314,19 @@ public sealed class TableRunner : ITableRunner
     private static string BuildErrorMessage(TableExecutionContext ctx, string phase)
     {
         return $"Failed to execute job '{ctx.JobName}' for table '{ctx.TargetSchema}.{ctx.TargetTable}' during phase '{phase}'.";
+    }
+
+    private TableProgressEvent BuildFailedEvent(TableExecutionContext ctx, SyncPhase phase, DateTimeOffset startedAt, string message)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new TableProgressEvent(
+            ctx.JobName,
+            TableIdentifier.Parse($"{ctx.TargetSchema}.{ctx.TargetTable}"),
+            ProgressEventKind.Failed,
+            phase,
+            now,
+            Elapsed: now - startedAt,
+            IsDryRun: ctx.DryRun,
+            ErrorMessage: message);
     }
 }

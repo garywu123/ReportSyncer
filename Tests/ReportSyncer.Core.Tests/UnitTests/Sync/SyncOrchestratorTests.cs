@@ -28,6 +28,7 @@ public class SyncOrchestratorTests
 
         var configProvider = new Mock<IConfigurationProvider>(MockBehavior.Strict);
         var preFlightValidator = new Mock<IPreFlightValidator>(MockBehavior.Strict);
+        var runner = new Mock<ITableRunner>(MockBehavior.Strict);
 
         var sequence = new MockSequence();
         configProvider.InSequence(sequence)
@@ -37,7 +38,7 @@ public class SyncOrchestratorTests
             .Setup(v => v.ValidateAsync(config, job, It.IsAny<CancellationToken>()))
             .ReturnsAsync(preFlightResult);
 
-        var orchestrator = new SyncOrchestrator(configProvider.Object, preFlightValidator.Object);
+        var orchestrator = new SyncOrchestrator(configProvider.Object, preFlightValidator.Object, runner.Object);
 
         // Act
         var result = await orchestrator.RunJobAsync("path.yaml", job.Name, null, CancellationToken.None);
@@ -68,7 +69,8 @@ public class SyncOrchestratorTests
             .Setup(v => v.ValidateAsync(config, job, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new SchemaMismatchException("boom"));
 
-        var orchestrator = new SyncOrchestrator(configProvider.Object, preFlightValidator.Object);
+        var runner = new Mock<ITableRunner>(MockBehavior.Strict);
+        var orchestrator = new SyncOrchestrator(configProvider.Object, preFlightValidator.Object, runner.Object);
 
         // Act
         var act = () => orchestrator.RunJobAsync("path.yaml", job.Name, null, CancellationToken.None);
@@ -104,7 +106,8 @@ public class SyncOrchestratorTests
             .Setup(v => v.ValidateAsync(config, job, It.IsAny<CancellationToken>()))
             .ReturnsAsync(preFlightResult);
 
-        var orchestrator = new SyncOrchestrator(configProvider.Object, preFlightValidator.Object);
+        var runner = new Mock<ITableRunner>(MockBehavior.Strict);
+        var orchestrator = new SyncOrchestrator(configProvider.Object, preFlightValidator.Object, runner.Object);
 
         // Act
         var result = await orchestrator.RunJobAsync("path.yaml", job.Name, null, CancellationToken.None);
@@ -123,12 +126,28 @@ public class SyncOrchestratorTests
     }
 
     [Fact]
-    public async Task RunJobAsync_WhenNotDryRun_ThrowsSyncExecutionException()
+    public async Task RunJobAsync_WhenNotDryRun_ExecutesDeleteThenInsertOrders()
     {
         // Arrange
-        var job = CreateJob("RealRunJob", new TableTaskConfig("dbo.Source", "dbo.Target"));
+        var job = CreateJob("RealRunJob",
+            new TableTaskConfig("dbo.SourceA", "dbo.TargetA"),
+            new TableTaskConfig("dbo.SourceB", "dbo.TargetB"),
+            new TableTaskConfig("dbo.SourceC", "dbo.TargetC"));
         var config = CreateConfig(job, dryRun: false);
-        var preFlightResult = CreatePreFlightResult(job.Name, dryRun: false);
+        var plan = new ExecutionPlan(
+            new[]
+            {
+                TableIdentifier.Parse("dbo.TargetA"),
+                TableIdentifier.Parse("dbo.TargetB"),
+                TableIdentifier.Parse("dbo.TargetC")
+            },
+            new[]
+            {
+                TableIdentifier.Parse("dbo.TargetC"),
+                TableIdentifier.Parse("dbo.TargetB"),
+                TableIdentifier.Parse("dbo.TargetA")
+            });
+        var preFlightResult = CreatePreFlightResult(job.Name, dryRun: false, plan);
 
         var configProvider = new Mock<IConfigurationProvider>(MockBehavior.Strict);
         configProvider
@@ -140,18 +159,40 @@ public class SyncOrchestratorTests
             .Setup(v => v.ValidateAsync(config, job, It.IsAny<CancellationToken>()))
             .ReturnsAsync(preFlightResult);
 
-        var orchestrator = new SyncOrchestrator(configProvider.Object, preFlightValidator.Object);
+        var runnerCalls = new List<(string Phase, string Table)>();
+        var runner = new Mock<ITableRunner>(MockBehavior.Strict);
+        runner.Setup(r => r.RunPhaseAsync(It.IsAny<TableExecutionContext>(), SyncPhase.Delete, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TableExecutionContext ctx, SyncPhase _, CancellationToken _) =>
+            {
+                runnerCalls.Add(("Delete", $"{ctx.TargetSchema}.{ctx.TargetTable}"));
+                return new TableResult($"{ctx.TargetSchema}.{ctx.TargetTable}", TableStatus.Succeeded);
+            });
+        runner.Setup(r => r.RunPhaseAsync(It.IsAny<TableExecutionContext>(), SyncPhase.Insert, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TableExecutionContext ctx, SyncPhase _, CancellationToken _) =>
+            {
+                runnerCalls.Add(("Insert", $"{ctx.TargetSchema}.{ctx.TargetTable}"));
+                return new TableResult($"{ctx.TargetSchema}.{ctx.TargetTable}", TableStatus.Succeeded);
+            });
+
+        var orchestrator = new SyncOrchestrator(configProvider.Object, preFlightValidator.Object, runner.Object);
 
         // Act
-        var act = () => orchestrator.RunJobAsync("path.yaml", job.Name, null, CancellationToken.None);
+        var result = await orchestrator.RunJobAsync("path.yaml", job.Name, null, CancellationToken.None);
 
         // Assert
-        var ex = await act.Should().ThrowAsync<SyncExecutionException>();
-        ex.Which.Message.Should().Be("Execution engine not implemented. Implement Section 5.");
+        result.Status.Should().Be(JobStatus.Succeeded);
+        runnerCalls.Should().ContainInOrder(
+            ("Delete", "dbo.TargetC"),
+            ("Delete", "dbo.TargetB"),
+            ("Delete", "dbo.TargetA"),
+            ("Insert", "dbo.TargetA"),
+            ("Insert", "dbo.TargetB"),
+            ("Insert", "dbo.TargetC"));
 
         configProvider.VerifyAll();
         preFlightValidator.Verify(v => v.ValidateAsync(config, job, It.IsAny<CancellationToken>()), Times.Once);
         preFlightValidator.VerifyNoOtherCalls();
+        runner.VerifyAll();
     }
 
     private static SyncJobConfig CreateJob(string name, params TableTaskConfig[] tables)
@@ -186,12 +227,12 @@ public class SyncOrchestratorTests
             syncJobs: new[] { job });
     }
 
-    private static PreFlightResult CreatePreFlightResult(string jobName, bool dryRun)
+    private static PreFlightResult CreatePreFlightResult(string jobName, bool dryRun, ExecutionPlan? plan = null)
     {
-        return new PreFlightResult(jobName, dryRun, CreateSchemaAnalysisResult());
+        return new PreFlightResult(jobName, dryRun, CreateSchemaAnalysisResult(plan));
     }
 
-    private static SchemaAnalysisResult CreateSchemaAnalysisResult()
+    private static SchemaAnalysisResult CreateSchemaAnalysisResult(ExecutionPlan? plan = null)
     {
         var sourceTableId = TableIdentifier.Parse("dbo.Source");
         var targetTableId = TableIdentifier.Parse("dbo.Target");
@@ -202,8 +243,33 @@ public class SyncOrchestratorTests
         var sourceSnapshot = new SchemaSnapshot(new[] { sourceTable }, SchemaRole.Source, SchemaInspectionLevel.Full);
         var targetSnapshot = new SchemaSnapshot(new[] { targetTable }, SchemaRole.Target, SchemaInspectionLevel.Full);
 
-        var mapping = new SchemaMappingResult(true, Array.Empty<SchemaMappingError>(), new Dictionary<TableIdentifier, TableMapping>());
-        var plan = new ExecutionPlan(new[] { targetTableId }, new[] { targetTableId });
+        var col = new ColumnSchema("Id", typeof(int), "int", false, false, true, null);
+        var mapDict = new Dictionary<TableIdentifier, TableMapping>
+        {
+            [targetTableId] = new TableMapping(
+                sourceTableId,
+                targetTableId,
+                new[] { new ColumnMapping(col, col, MappingKind.OneToOne, null) },
+                HasWarnings: false),
+            [TableIdentifier.Parse("dbo.TargetA")] = new TableMapping(
+                TableIdentifier.Parse("dbo.SourceA"),
+                TableIdentifier.Parse("dbo.TargetA"),
+                new[] { new ColumnMapping(col, col, MappingKind.OneToOne, null) },
+                HasWarnings: false),
+            [TableIdentifier.Parse("dbo.TargetB")] = new TableMapping(
+                TableIdentifier.Parse("dbo.SourceB"),
+                TableIdentifier.Parse("dbo.TargetB"),
+                new[] { new ColumnMapping(col, col, MappingKind.OneToOne, null) },
+                HasWarnings: false),
+            [TableIdentifier.Parse("dbo.TargetC")] = new TableMapping(
+                TableIdentifier.Parse("dbo.SourceC"),
+                TableIdentifier.Parse("dbo.TargetC"),
+                new[] { new ColumnMapping(col, col, MappingKind.OneToOne, null) },
+                HasWarnings: false)
+        };
+
+        var mapping = new SchemaMappingResult(true, Array.Empty<SchemaMappingError>(), mapDict);
+        plan ??= new ExecutionPlan(new[] { targetTableId }, new[] { targetTableId });
 
         return new SchemaAnalysisResult(sourceSnapshot, targetSnapshot, mapping, plan);
     }

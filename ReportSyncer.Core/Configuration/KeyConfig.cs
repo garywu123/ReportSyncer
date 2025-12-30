@@ -9,7 +9,6 @@
 namespace ReportSyncer.Core.Configuration
 {
     /// <summary>
-    /// <summary>
     /// Key column configuration for table sync tasks.
     /// </summary>
     public class KeyConfig

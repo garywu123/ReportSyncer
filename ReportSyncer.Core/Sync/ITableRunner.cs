@@ -21,4 +21,13 @@ public interface ITableRunner
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="TableResult"/> summarizing the table execution.</returns>
     Task<TableResult> RunAsync(TableExecutionContext ctx, CancellationToken ct);
+
+    /// <summary>
+    /// Executes a single phase (Delete or Insert) for a table.
+    /// </summary>
+    /// <param name="ctx">Context describing the job, tables, filters, and mapping.</param>
+    /// <param name="phase">Phase to execute.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A <see cref="TableResult"/> for the executed phase.</returns>
+    Task<TableResult> RunPhaseAsync(TableExecutionContext ctx, SyncPhase phase, CancellationToken ct);
 }
