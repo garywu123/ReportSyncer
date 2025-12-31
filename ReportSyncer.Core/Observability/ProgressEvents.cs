@@ -5,9 +5,6 @@
 // Description: Progress event contracts for job and table execution.
 // ============================================================================
 
-using ReportSyncer.Core.Schema;
-using ReportSyncer.Core.Sync.Contracts;
-
 namespace ReportSyncer.Core.Observability;
 
 /// <summary>
@@ -29,32 +26,3 @@ public enum ProgressPhase
     Preflight,
     Execution
 }
-
-/// <summary>
-/// Progress notification for a job lifecycle.
-/// </summary>
-public sealed record JobProgressEvent(
-    string JobId,
-    ProgressEventKind Kind,
-    ProgressPhase Phase,
-    DateTimeOffset UtcTimestamp,
-    TimeSpan? Elapsed = null,
-    string? Message = null,
-    string? ErrorCode = null,
-    string? ErrorMessage = null);
-
-/// <summary>
-/// Progress notification for a table-phase lifecycle.
-/// </summary>
-public sealed record TableProgressEvent(
-    string JobId,
-    TableIdentifier Table,
-    ProgressEventKind Kind,
-    SyncPhase Phase,
-    DateTimeOffset UtcTimestamp,
-    TimeSpan? Elapsed = null,
-    int? RowsAffected = null,
-    bool IsDryRun = false,
-    string? Message = null,
-    string? ErrorCode = null,
-    string? ErrorMessage = null);
