@@ -28,11 +28,17 @@ public sealed class LoggingJobProgressReporter : IJobProgressReporter
             case ProgressEventKind.Completed:
                 _log.LogInformation(message);
                 break;
+            case ProgressEventKind.InProgress:
+                _log.LogDebug(message);
+                break;
             case ProgressEventKind.Skipped:
                 _log.LogWarning(message);
                 break;
             case ProgressEventKind.Failed:
                 _log.LogError($"{message}: {evt.ErrorMessage ?? evt.Message}");
+                break;
+            default:
+                _log.LogWarning($"Unknown ProgressEventKind: {evt.Kind}");
                 break;
         }
     }
@@ -47,11 +53,17 @@ public sealed class LoggingJobProgressReporter : IJobProgressReporter
             case ProgressEventKind.Completed:
                 _log.LogInformation(message);
                 break;
+            case ProgressEventKind.InProgress:
+                _log.LogDebug($"{message} - Progress: {evt.Metrics?.RowsProcessed ?? 0}/{evt.Metrics?.TotalRowsPlanned ?? 0}");
+                break;
             case ProgressEventKind.Skipped:
                 _log.LogWarning(message);
                 break;
             case ProgressEventKind.Failed:
                 _log.LogError($"{message}: {evt.ErrorMessage ?? evt.Message}");
+                break;
+            default:
+                _log.LogWarning($"Unknown ProgressEventKind: {evt.Kind}");
                 break;
         }
     }

@@ -36,7 +36,7 @@ public class IdentityInsertManagerIntegrationTests
         {
             await using (await manager.BeginAsync(ctx, CancellationToken.None, db))
             {
-                var cmdOn = db.CreateCommand("INSERT INTO rpt.TargetEvents(CustomerId, EventId, EventTime, Payload) VALUES (50, 500, GETDATE(), 'on');", System.Data.CommandType.Text);
+                var cmdOn = db.CreateCommand("INSERT INTO rpt.TargetEvents(CustomerId, EventId, EventTime, Payload) VALUES (50, 500, GETDATE(), 'on');", CommandType.Text);
                 var inserted = await db.ExecuteNonQueryAsync(cmdOn, CancellationToken.None);
                 inserted.Should().Be(1);
             }
@@ -44,7 +44,7 @@ public class IdentityInsertManagerIntegrationTests
 
         using (var db = new PersistentDbContext(_fixture.ConnectionString))
         {
-            var cmdOff = db.CreateCommand("INSERT INTO rpt.TargetEvents(CustomerId, EventId, EventTime, Payload) VALUES (51, 501, GETDATE(), 'off');", System.Data.CommandType.Text);
+            var cmdOff = db.CreateCommand("INSERT INTO rpt.TargetEvents(CustomerId, EventId, EventTime, Payload) VALUES (51, 501, GETDATE(), 'off');", CommandType.Text);
             var act = () => db.ExecuteNonQueryAsync(cmdOff, CancellationToken.None);
             await act.Should().ThrowAsync<SqlException>();
         }

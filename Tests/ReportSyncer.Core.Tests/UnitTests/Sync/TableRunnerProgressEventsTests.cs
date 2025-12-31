@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Data.Common;
 using FluentAssertions;
 using Moq;
 using ReportSyncer.Core.Observability;
@@ -108,7 +110,7 @@ public class TableRunnerProgressEventsTests
             batchSize: 1000);
     }
 
-    private sealed class InMemoryRowConnectionFactory : DotNetToolkit.Database.Abstractions.IDbConnectionFactory
+    private class InMemoryRowConnectionFactory : DotNetToolkit.Database.Abstractions.IDbConnectionFactory
     {
         private readonly List<IReadOnlyDictionary<string, object?>> _rows;
 
@@ -122,10 +124,10 @@ public class TableRunnerProgressEventsTests
         public Task<System.Data.IDbConnection> CreateConnectionAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<System.Data.IDbConnection>(new InMemoryRowConnection(_rows));
 
-        public System.Data.Common.DbProviderFactory GetProviderFactory() => throw new NotImplementedException();
+        public DbProviderFactory GetProviderFactory() => throw new NotImplementedException();
     }
 
-    private sealed class InMemoryRowConnection : System.Data.Common.DbConnection
+    private class InMemoryRowConnection : DbConnection
     {
         private readonly List<IReadOnlyDictionary<string, object?>> _rows;
 
@@ -146,11 +148,11 @@ public class TableRunnerProgressEventsTests
         public override void Close() { }
         public override void Open() { }
 
-        protected override System.Data.Common.DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel) => throw new NotImplementedException();
-        protected override System.Data.Common.DbCommand CreateDbCommand() => new InMemoryRowCommand(_rows);
+        protected override DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel) => throw new NotImplementedException();
+        protected override DbCommand CreateDbCommand() => new InMemoryRowCommand(_rows);
     }
 
-    private sealed class InMemoryRowCommand : System.Data.Common.DbCommand
+    private class InMemoryRowCommand : DbCommand
     {
         private readonly List<IReadOnlyDictionary<string, object?>> _rows;
 
@@ -166,11 +168,11 @@ public class TableRunnerProgressEventsTests
         public override int CommandTimeout { get; set; }
         public override System.Data.CommandType CommandType { get; set; } = System.Data.CommandType.Text;
 #pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
-        protected override System.Data.Common.DbConnection DbConnection { get; set; } = null!;
+        protected override DbConnection DbConnection { get; set; } = null!;
 #pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
-        protected override System.Data.Common.DbParameterCollection DbParameterCollection { get; } = new InMemoryParameterCollection();
+        protected override DbParameterCollection DbParameterCollection { get; } = new InMemoryParameterCollection();
 #pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
-        protected override System.Data.Common.DbTransaction DbTransaction { get; set; } = null!;
+        protected override DbTransaction DbTransaction { get; set; } = null!;
 #pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override bool DesignTimeVisible { get; set; }
         public override System.Data.UpdateRowSource UpdatedRowSource { get; set; }
@@ -179,11 +181,11 @@ public class TableRunnerProgressEventsTests
         public override int ExecuteNonQuery() => 0;
         public override object? ExecuteScalar() => null;
         public override void Prepare() { }
-        protected override System.Data.Common.DbParameter CreateDbParameter() => new InMemoryParameter();
-        protected override System.Data.Common.DbDataReader ExecuteDbDataReader(System.Data.CommandBehavior behavior) => new InMemoryRowReader(_rows);
+        protected override DbParameter CreateDbParameter() => new InMemoryParameter();
+        protected override DbDataReader ExecuteDbDataReader(System.Data.CommandBehavior behavior) => new InMemoryRowReader(_rows);
     }
 
-    private sealed class InMemoryRowReader : System.Data.Common.DbDataReader
+    private class InMemoryRowReader : DbDataReader
     {
         private readonly System.Data.DataTableReader _inner;
 
@@ -245,33 +247,33 @@ public class TableRunnerProgressEventsTests
         public override bool Read() => _inner.Read();
     }
 
-    private sealed class InMemoryParameterCollection : System.Data.Common.DbParameterCollection
+    private class InMemoryParameterCollection : DbParameterCollection
     {
-        private readonly List<System.Data.Common.DbParameter> _inner = new();
+        private readonly List<DbParameter> _inner = new();
 
         public override int Count => _inner.Count;
         public override object SyncRoot => this;
-        public override int Add(object value) { _inner.Add((System.Data.Common.DbParameter)value); return _inner.Count - 1; }
+        public override int Add(object value) { _inner.Add((DbParameter)value); return _inner.Count - 1; }
         public override void AddRange(Array values) { foreach (var v in values) Add(v!); }
         public override void Clear() => _inner.Clear();
-        public override bool Contains(object value) => _inner.Contains((System.Data.Common.DbParameter)value);
+        public override bool Contains(object value) => _inner.Contains((DbParameter)value);
         public override bool Contains(string value) => _inner.Any(p => p.ParameterName == value);
         public override void CopyTo(Array array, int index) => _inner.ToArray().CopyTo(array, index);
-        public override System.Collections.IEnumerator GetEnumerator() => _inner.GetEnumerator();
-        public override int IndexOf(object value) => _inner.IndexOf((System.Data.Common.DbParameter)value);
+        public override IEnumerator GetEnumerator() => _inner.GetEnumerator();
+        public override int IndexOf(object value) => _inner.IndexOf((DbParameter)value);
         public override int IndexOf(string parameterName) => _inner.FindIndex(p => p.ParameterName == parameterName);
-        public override void Insert(int index, object value) => _inner.Insert(index, (System.Data.Common.DbParameter)value);
-        public override void Remove(object value) => _inner.Remove((System.Data.Common.DbParameter)value);
+        public override void Insert(int index, object value) => _inner.Insert(index, (DbParameter)value);
+        public override void Remove(object value) => _inner.Remove((DbParameter)value);
         public override void RemoveAt(int index) => _inner.RemoveAt(index);
         public override void RemoveAt(string parameterName)
         {
             var idx = IndexOf(parameterName);
             if (idx >= 0) _inner.RemoveAt(idx);
         }
-        protected override System.Data.Common.DbParameter GetParameter(int index) => _inner[index];
-        protected override System.Data.Common.DbParameter GetParameter(string parameterName) => _inner[IndexOf(parameterName)];
-        protected override void SetParameter(int index, System.Data.Common.DbParameter value) => _inner[index] = value;
-        protected override void SetParameter(string parameterName, System.Data.Common.DbParameter value)
+        protected override DbParameter GetParameter(int index) => _inner[index];
+        protected override DbParameter GetParameter(string parameterName) => _inner[IndexOf(parameterName)];
+        protected override void SetParameter(int index, DbParameter value) => _inner[index] = value;
+        protected override void SetParameter(string parameterName, DbParameter value)
         {
             var idx = IndexOf(parameterName);
             if (idx >= 0) _inner[idx] = value;
@@ -279,7 +281,7 @@ public class TableRunnerProgressEventsTests
         }
     }
 
-    private sealed class InMemoryParameter : System.Data.Common.DbParameter
+    private class InMemoryParameter : DbParameter
     {
         public override System.Data.DbType DbType { get; set; }
         public override System.Data.ParameterDirection Direction { get; set; } = System.Data.ParameterDirection.Input;

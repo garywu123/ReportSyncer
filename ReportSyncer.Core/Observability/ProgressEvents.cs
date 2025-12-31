@@ -8,11 +8,12 @@
 namespace ReportSyncer.Core.Observability;
 
 /// <summary>
-/// High-level event kind used for job/table progress.
+/// High-level kinds for progress events. Use <see cref="InProgress"/> for real-time updates.
 /// </summary>
 public enum ProgressEventKind
 {
     Started,
+    InProgress,
     Completed,
     Skipped,
     Failed
