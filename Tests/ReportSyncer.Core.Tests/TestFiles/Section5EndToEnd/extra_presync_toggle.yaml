@@ -15,11 +15,11 @@ schemaPolicy:
   allowExtraTargetColumns: true
 connections:
   - name: "LocalSource"
-    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    connectionString: 'Server=(localdb)\MSSQLLocalDB;Initial Catalog=ReportSyncerTest;Integrated Security=True;'
     environment: "Dev"
     type: "Reporting"
   - name: "LocalTarget"
-    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    connectionString: 'Server=(localdb)\MSSQLLocalDB;Initial Catalog=ReportSyncerTest;Integrated Security=True;'
     environment: "Dev"
     type: "Reporting"
 syncJobs:
@@ -27,14 +27,15 @@ syncJobs:
     sourceConnection: "LocalSource"
     targetConnection: "LocalTarget"
     parameters:
-      ParentBizKey: "P-1"
-      ParentId: 1
+      ParentBizKey: "P-3"
+      ParentId: 3
     tables:
       - source: "rs_src.Parent"
         target: "rs_tgt.Parent"
         enabled: true
         preSyncTargetAction: true
         allowAllDelete: false
+        enableIdentityInsert: true
         filter:
           keyColumn: "BizKey"
           value: "{ParentBizKey}"
@@ -43,10 +44,30 @@ syncJobs:
       - source: "rs_src.Child"
         target: "rs_tgt.Child"
         enabled: true
-        preSyncTargetAction: false  # append-only for comparison
+        preSyncTargetAction: true
         allowAllDelete: false
+        enableIdentityInsert: false
         filter:
           keyColumn: "ParentId"
           value: "{ParentId}"
         columnMapping:
-          automapByName: true
+          automapByName: false
+          mappings:
+            ChildId:
+              ignore: true
+            ParentId:
+              fromSource: "ParentId"
+            LineCode:
+              fromSource: "LineCode"
+            Amount:
+              fromSource: "Amount"
+            CreatedOn:
+              fromSource: "CreatedOn"
+
+
+
+
+
+
+
+

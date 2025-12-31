@@ -182,6 +182,7 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
 
         var sourceId = TableIdentifier.Parse(tableTask.Source);
         var targetId = TableIdentifier.Parse(tableTask.Target);
+        var filters = BuildFilters(tableTask.Filter, job);
 
         return new TableExecutionContext(
             Guid.NewGuid(),
@@ -199,9 +200,58 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
             enableIdentityInsert: tableTask.EnableIdentityInsert,
             contextColumnName: null,
             contextValue: null,
-            filters: Array.Empty<FilterPredicate>(),
+            filters: filters,
             mapping,
             preFlight.Schema.ExecutionPlan,
             config.Run.DefaultBatchSize);
+    }
+
+    private static IReadOnlyList<FilterPredicate> BuildFilters(FilterConfig? filterConfig, SyncJobConfig job)
+    {
+        if (filterConfig is null)
+            return Array.Empty<FilterPredicate>();
+
+        var list = new List<FilterPredicate>();
+        if (!string.IsNullOrWhiteSpace(filterConfig.KeyColumn) && !string.IsNullOrWhiteSpace(filterConfig.Value))
+        {
+            list.Add(new FilterPredicate(
+                filterConfig.KeyColumn,
+                FilterOperator.Equals,
+                ResolvePlaceholder(filterConfig.Value, job)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filterConfig.DateColumn)
+            && !string.IsNullOrWhiteSpace(filterConfig.StartDate)
+            && !string.IsNullOrWhiteSpace(filterConfig.EndDate))
+        {
+            list.Add(new FilterPredicate(
+                filterConfig.DateColumn,
+                FilterOperator.BetweenInclusive,
+                ResolvePlaceholder(filterConfig.StartDate!, job),
+                ResolvePlaceholder(filterConfig.EndDate!, job)));
+        }
+
+        return list;
+    }
+
+    private static object? ResolvePlaceholder(string raw, SyncJobConfig job)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return raw;
+
+        if (raw.Length > 2 && raw.StartsWith("{", StringComparison.Ordinal) && raw.EndsWith("}", StringComparison.Ordinal))
+        {
+            var key = raw.Trim('{', '}');
+            if (job.Parameters is not null)
+            {
+                foreach (var kv in job.Parameters)
+                {
+                    if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase))
+                        return kv.Value;
+                }
+            }
+        }
+
+        return raw;
     }
 }

@@ -201,7 +201,6 @@ Provide clean DI hooks so any host (ReportSyncer.Console, ReportSyncer.WebApi, o
     
 - Logging plan from Task 1.2.
     
-
 **What must be implemented**
 
 - Validate and, if needed, refine `AddDatabaseServices`:
@@ -1532,35 +1531,166 @@ PRD 说“大删除要暂停等待用户确认”，但 Core 没有“交互式�
 - **Source 永远只读**：你只要在 Source 上误执行一次 DML，这工具就从“同步工具”变成“职业生涯终结者”。
 以上就是 Section 5 的任务清单。你把这份丢给下一个 Developer，他们就能据此写 Step-by-step playbook，而且不会把 Scope 膨胀到 Section 6/7 去。
 
----
 
-## Section 6 — Observability & Run Artifacts（先让人类知道它在干嘛）
-
-### 6.1 核心目标
-- 在不依赖 host（Console/WebApi/GUI）的前提下，提供**可消费的运行信息**：日志、进度事件、结果报告。
-### 6.2 必须做对的决策点
-
-- **结构化日志**：必须具备 Job/Table/Phase 的 correlation（不然无法排障）。
-- **进度事件模型**：Start/End/Skip/Fail + 最小 payload（table、rows、elapsed、error）。
-- **Run Report**：机器可读（JSON/目录输出皆可），包含：plan 摘要、每表结果、耗时、错误列表。
-- **取消**：job 级 cancellation（后续 GUI/WebApi 必需）。
-    
-### 6.3 关键约束
-
-- Observability 必须是 library 级能力，host 只是 sink/consumer。
-- 错误聚合必须可行动（不要只有 exception dump）。
-    
-
-### 6.4 验收标准
-- 跑一次 job：
-    - 日志可定位到“哪个 job / 哪张表 / 哪个阶段”。
-    - 事件序列符合预期（开始→结束/开始→失败）。
-    - report 文件落地且字段完整。
-        
+### Integration Tests 场景
+需要创建两个数据库，一个数据库作为 Src，一个作为 Target，Target 中对应 Mapping 的列，可以添加一些诸如额外的 CustomerId 列等情况。
+- DryRun 模式下
+	- 确保没有执行操作
+	- 确保返回一系列需要插入的 Table，并且按照 FK 的顺序进行排序，如果有多个 Table 共享一个 FK，其 Order 顺序也不能变（因此你需要创建 SQL 数据库需要更复杂一些）
+- RealRun 模式下
+	- 常规插入，带有 FK 情况
+		- 多个子表共享一个父表，推荐测试的数据库中至少有4个子 Table，外加2个父Table，按照 FK 顺序进行排序。
+		- 两个表 Mapping，同时 Target Table 中有一个 CustomerId 列，需要 YAML 额外说明，插入成功。
+			- YAML 没有额外配置，插入失败。
+	- 常规插入，忽略 FK 情况，排序则按照 YAML 配置文件中的顺序安排
+	- 常规插入，ID Insert 场景
+		- 目标 Table 的确带有 ID，并且有 Mapping，成功
+		- 目标 Table 有 ID 列，但没有 Mapping，失败
+		- 
+	- 
 
 ---
 
-## Section 7 — Reliability & Operator Experience（重试、稳定性、可控失败）
+# Section 6 — Observability & Run Artifacts（先让人类知道它在干嘛）
+
+- 核心目标
+	- 在不依赖 host（Console/WebApi/GUI）的前提下，提供**可消费的运行信息**：日志、进度事件、结果报告。
+- 必须做对的决策点
+	- **结构化日志**：必须具备 Job/Table/Phase 的 correlation（不然无法排障）。
+	- **进度事件模型**：Start/End/Skip/Fail + 最小 payload（table、rows、elapsed、error）。
+	- **Run Report**：机器可读（JSON/目录输出皆可），包含：plan 摘要、每表结果、耗时、错误列表。
+	- **取消**：job 级 cancellation（后续 GUI/WebApi 必需）。
+- 关键约束
+	- Observability 必须是 library 级能力，host 只是 sink/consumer。
+	- 错误聚合必须可行动（不要只有 exception dump）。
+- 验收标准
+	- 跑一次 job：
+	    - 日志可定位到“哪个 job / 哪张表 / 哪个阶段”。
+	    - 事件序列符合预期（开始→结束/开始→失败）。
+	    - report 文件落地且字段完整。
+
+---
+
+### Task 6.1 — 观测模型“定版”（Contracts Stabilization）
+
+**要做什么**
+- 固化 Core 可用的 Observability contracts（DTO + 接口），避免 host 绑架领域模型。
+- 统一 correlation 字段：至少包含 `JobId`, `TableName`, `Phase`（以及时间戳/级别/错误摘要等）。
+
+**关键点**
+- 事件模型必须覆盖：Start/End/Skip/Fail（job 级 + table 级）。:contentReference[oaicite:3]{index=3}
+- 保持 sink 无关：Core 只调用抽象接口，不知道 Console/IPC/文件怎么写。 :contentReference[oaicite:4]{index=4}
+
+**交付物**
+- `ReportSyncer.Core.Observability` 下的接口与 DTO（定版，不再随便改字段）。
+- 一个默认的 `Null`/`Noop` reporter（确保 Core 永远能调用，不用到处判空）。
+
+---
+
+### Task 6.2 — 结构化日志落地（Structured Logging with Correlation）
+
+**要做什么**
+- 建立结构化日志能力，保证每条关键日志都能关联到 Job/Table/Phase。:contentReference[oaicite:5]{index=5}
+
+**关键点**
+- 日志不是“给人看热闹”的，必须能用于排障与追溯，所以 correlation 是硬要求。
+- 日志事件应包含“可行动信息”：比如失败发生的 table、phase、错误分类（domain exception 类型）与简短原因。:contentReference[oaicite:6]{index=6}
+
+**交付物**
+- Core 层可调用的日志抽象（或复用你既有 logging 设施），并确保能附加 correlation context。
+- 明确日志输出的目录/命名规则（为后续 history/report 铺路）。
+
+---
+
+### Task 6.3 — 进度追踪增强（ProgressTracker + Periodic Progress Events）
+
+**要做什么**
+- 在 Section 5 的“最小事件”基础上，补齐“可用进度”：吞吐、ETA、percent 等（不要求花里胡哨，但要稳定）。:contentReference[oaicite:7]{index=7}
+
+**关键点**
+- 事件应支持“周期性推送”（按 batch 完成或固定间隔），否则 UI/CLI 没法展示实时进度。:contentReference[oaicite:8]{index=8}
+- 进度计算建议由 `ProgressTracker` 统一管理（避免各处自己算一套）。:contentReference[oaicite:9]{index=9}
+
+**交付物**
+- `ProgressTracker` 可在执行过程中持续更新并生成 `JobProgressEvent`。
+- reporter 能发出 `jobProgress` 风格事件（字段至少覆盖 rowsProcessed/totalPlanned/throughput/eta）。:contentReference[oaicite:10]{index=10}
+
+---
+
+### Task 6.4 — Run Report 生成器（Machine-readable Run Report）
+
+**要做什么**
+- 实现 Run Report 输出（JSON 或目录结构均可），包含：plan 摘要、每表结果、耗时、错误列表。:contentReference[oaicite:11]{index=11}
+
+**关键点**
+- report 必须能被机器读（后续 GUI/WebApi 要靠它展示历史与结果）。
+- 错误列表必须是“聚合后的可行动信息”，不是一坨 exception dump。:contentReference[oaicite:12]{index=12}
+
+**交付物**
+- `RunReport`（或 `JobReport`）模型 + `IRunReportWriter`（或等价组件）。
+- 每次 job 结束（Success/Failed/Cancelled）都会落地 report 文件。
+
+---
+
+### Task 6.5 — 历史记录服务（History Service）
+
+**要做什么**
+- 提供 run history 的读取与追加能力，支撑 “getHistory” 之类的调用（host 只是来要数据）。:contentReference[oaicite:13]{index=13}
+
+**关键点**
+- `IHistoryService` 负责 `GetRecentRunsAsync` 和 `AppendAsync(JobResult)` 这类稳定接口；实现可以基于结构化日志或 report 文件重建。:contentReference[oaicite:14]{index=14}
+- 对 IO/解析失败要有策略：至少不应该把“本次 job 结果”吞掉（history 写失败是另一个问题）。:contentReference[oaicite:15]{index=15}
+
+**交付物**
+- `IHistoryService` + `LogHistoryService`（或你选的存储实现）。
+- `RunSummary` 模型（用于列表展示，而不是完整 report）。:contentReference[oaicite:16]{index=16}
+
+---
+
+### Task 6.6 — Job 级取消语义（Cancellation Semantics End-to-End）
+
+**要做什么**
+- 在 orchestrator 边界正确支持 cancellation：一旦取消触发，不再继续任何 DML，并产出“Cancelled”结局（事件 + report）。:contentReference[oaicite:17]{index=17}
+
+**关键点**
+- cancellation 必须能穿透到 DataWriter/Runner 等底层（尊重 `CancellationToken`）。
+- 取消属于“正常流”，不该被记录成“莫名其妙失败”，但必须可追溯（jobId、已处理行数、耗时）。:contentReference[oaicite:18]{index=18}
+
+**交付物**
+- 取消时：发出 JobCompleted（Cancelled）事件 + 落地 report（status=Cancelled）。
+- Orchestrator 把 `OperationCanceledException` 映射为你定义的取消类型（例如 `UserCancelledException`），并保持一致错误模型。
+
+---
+
+### Task 6.7 — Section 6 的测试面（Observability & Artifacts Tests）
+
+**要做什么**
+- 用自动化测试把 Section 6 的“可观测性可用”锁死，不然以后每改一次执行流程就全靠猜。
+
+**关键点**
+- 验收必须覆盖文档要求：  
+  - 日志能定位到 job/table/phase  
+  - 事件序列符合开始→结束/开始→失败  
+  - report 文件落地且字段完整:contentReference[oaicite:19]{index=19}
+
+**交付物**
+- Unit Tests：
+  - 事件序列：JobStart → (TableStart/TableEnd)* → JobEnd/Fail/Cancelled
+  - ProgressTracker：吞吐/ETA 计算稳定（给定输入序列输出一致）
+  - RunReport：字段完整性校验（schema-level assertions）
+- Integration Tests（轻量）：
+  - 跑一个最小 job，验证 report 文件生成 + history 可读回
+  - 触发取消，验证无后续 DML + report/status 正确
+
+
+
+
+---
+
+
+---
+
+# Section 7 — Reliability & Operator Experience（重试、稳定性、可控失败）
 
 ### 7.1 核心目标
 
@@ -1593,3 +1723,4 @@ PRD 说“大删除要暂停等待用户确认”，但 Core 没有“交互式�
     
 - 人为制造 write 错误：不重试写入，能清晰报告失败点与回滚结果。
     
+- 

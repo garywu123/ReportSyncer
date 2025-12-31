@@ -134,7 +134,9 @@ public class TableRunnerProgressEventsTests
             _rows = rows;
         }
 
+#pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override string ConnectionString { get; set; } = string.Empty;
+#pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override string Database => "InMemory";
         public override string DataSource => "InMemory";
         public override string ServerVersion => "1.0";
@@ -157,12 +159,19 @@ public class TableRunnerProgressEventsTests
             _rows = rows;
         }
 
+
+#pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override string CommandText { get; set; } = string.Empty;
+#pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override int CommandTimeout { get; set; }
         public override System.Data.CommandType CommandType { get; set; } = System.Data.CommandType.Text;
+#pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         protected override System.Data.Common.DbConnection DbConnection { get; set; } = null!;
+#pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         protected override System.Data.Common.DbParameterCollection DbParameterCollection { get; } = new InMemoryParameterCollection();
+#pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         protected override System.Data.Common.DbTransaction DbTransaction { get; set; } = null!;
+#pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override bool DesignTimeVisible { get; set; }
         public override System.Data.UpdateRowSource UpdatedRowSource { get; set; }
 
@@ -275,9 +284,13 @@ public class TableRunnerProgressEventsTests
         public override System.Data.DbType DbType { get; set; }
         public override System.Data.ParameterDirection Direction { get; set; } = System.Data.ParameterDirection.Input;
         public override bool IsNullable { get; set; }
+#pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override string ParameterName { get; set; } = string.Empty;
+#pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override int Size { get; set; }
+#pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override string SourceColumn { get; set; } = string.Empty;
+#pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
         public override bool SourceColumnNullMapping { get; set; }
         public override object? Value { get; set; }
         public override void ResetDbType() { }

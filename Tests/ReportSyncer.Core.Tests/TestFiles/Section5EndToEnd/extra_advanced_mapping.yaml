@@ -15,11 +15,11 @@ schemaPolicy:
   allowExtraTargetColumns: true
 connections:
   - name: "LocalSource"
-    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    connectionString: 'Server=(localdb)\MSSQLLocalDB;Initial Catalog=ReportSyncerTest;Integrated Security=True;'
     environment: "Dev"
     type: "Reporting"
   - name: "LocalTarget"
-    connectionString: "(localdb)\\MSSQLLocalDB;Database=ReportSyncerTest;Trusted_Connection=True;"
+    connectionString: 'Server=(localdb)\MSSQLLocalDB;Initial Catalog=ReportSyncerTest;Integrated Security=True;'
     environment: "Dev"
     type: "Reporting"
 syncJobs:
@@ -30,11 +30,24 @@ syncJobs:
       ProcessingDate: "2025-12-28"
       BatchId: "BATCH-001"
     tables:
+      - source: "rs_src.Parent"
+        target: "rs_tgt.Parent"
+        enabled: true
+        preSyncTargetAction: true
+        allowAllDelete: false
+        enableIdentityInsert: true
+        filter:
+          keyColumn: "BizKey"
+          value: "P-1"
+        columnMapping:
+          automapByName: true
       - source: "rs_src.Child"
         target: "rs_tgt.Child"
         enabled: true
         preSyncTargetAction: true
         allowAllDelete: false
+        enableIdentityInsert: true
+        ignoreDependencies: false
         filter:
           keyColumn: "ParentId"
           value: 1
@@ -57,3 +70,11 @@ syncJobs:
               ignore: true
         keys:
           businessKey: ["ChildId"]
+
+
+
+
+
+
+
+

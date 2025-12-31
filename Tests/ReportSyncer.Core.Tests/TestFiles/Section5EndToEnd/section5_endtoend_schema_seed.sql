@@ -1,6 +1,17 @@
 -- Integration schema and seed for Section 5 end-to-end tests.
--- Resets source (rs_src) and target (rs_tgt) schemas, builds core tables,
--- and seeds data used across IT1-IT8 scenarios.
+-- Creates/uses the ReportSyncerTest database, resets source (rs_src) and target (rs_tgt) schemas,
+-- builds core tables, and seeds data used across IT1-IT8 scenarios.
+
+-- Ensure database exists (run this script from a server-level connection, e.g., master).
+IF DB_ID('ReportSyncerTest') IS NULL
+BEGIN
+    PRINT 'Creating database ReportSyncerTest...';
+    CREATE DATABASE ReportSyncerTest;
+END
+GO
+
+USE ReportSyncerTest;
+GO
 
 SET NOCOUNT ON;
 
@@ -34,7 +45,7 @@ CREATE TABLE rs_src.Child (
     LineCode NVARCHAR(40) NOT NULL,
     Amount DECIMAL(18,2) NOT NULL,
     CreatedOn DATETIME2 NOT NULL DEFAULT (SYSUTCDATETIME()),
-    CONSTRAINT FK_rs_src_Child_Parent FOREIGN KEY (ParentId) REFERENCES rs_src.Parent(ParentId)
+    CONSTRAINT FK_rs_src_Child_Parent FOREIGN KEY (ParentId) REFERENCES rs_src.Parent(ParentId) ON DELETE CASCADE
 );
 GO
 
@@ -58,7 +69,7 @@ CREATE TABLE rs_tgt.Child (
     LineCode NVARCHAR(40) NOT NULL,
     Amount DECIMAL(18,2) NOT NULL,
     CreatedOn DATETIME2 NOT NULL DEFAULT (SYSUTCDATETIME()),
-    CONSTRAINT FK_rs_tgt_Child_Parent FOREIGN KEY (ParentId) REFERENCES rs_tgt.Parent(ParentId)
+    CONSTRAINT FK_rs_tgt_Child_Parent FOREIGN KEY (ParentId) REFERENCES rs_tgt.Parent(ParentId) ON DELETE CASCADE
 );
 GO
 
