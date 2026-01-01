@@ -27,10 +27,12 @@ public interface IDataWriter
     /// </summary>
     /// <param name="ctx">Table execution context describing the target and mapping.</param>
     /// <param name="rows">Rows to insert, keyed by target column name (case-insensitive).</param>
+    /// <param name="progress">Optional progress reporter for batch completion notifications.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total rows inserted.</returns>
     Task<int> InsertAsync(
         TableExecutionContext ctx,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        IProgress<InsertBatchProgress>? progress,
         CancellationToken ct);
 }

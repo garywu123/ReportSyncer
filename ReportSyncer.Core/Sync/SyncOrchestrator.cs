@@ -203,7 +203,8 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
             filters: filters,
             mapping,
             preFlight.Schema.ExecutionPlan,
-            config.Run.DefaultBatchSize);
+            config.Run.DefaultBatchSize,
+            config.Run.EtaSmoothing);
     }
 
     private static IReadOnlyList<FilterPredicate> BuildFilters(FilterConfig? filterConfig, SyncJobConfig job)

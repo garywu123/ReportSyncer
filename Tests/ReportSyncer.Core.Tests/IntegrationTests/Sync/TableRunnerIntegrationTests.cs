@@ -89,6 +89,6 @@ public class TableRunnerIntegrationTests
             filters: new[] { new FilterPredicate("CustomerId", FilterOperator.Equals, 1) },
             tableMapping: mapping,
             executionPlan: ExecutionPlan.Empty,
-            batchSize: 500);
+            batchSize: 500, etaSmoothing: null);
     }
 }

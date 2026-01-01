@@ -61,6 +61,7 @@ public sealed class SqlDataWriter : IDataWriter
     public async Task<int> InsertAsync(
         TableExecutionContext ctx,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        IProgress<InsertBatchProgress>? progress,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(ctx);
@@ -84,6 +85,12 @@ public sealed class SqlDataWriter : IDataWriter
                 var command = BuildInsertCommand(ctx, targetColumns, batch, db);
                 var affected = await db.ExecuteNonQueryAsync(command, ct).ConfigureAwait(false);
                 totalInserted += affected;
+
+                // Report progress after each batch
+                progress?.Report(new InsertBatchProgress(
+                    TotalProcessed: totalInserted,
+                    TotalPlanned: rows.Count,
+                    BatchRowsAffected: affected));
             }
         }
         catch (OperationCanceledException) { throw; }

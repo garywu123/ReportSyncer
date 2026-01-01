@@ -179,6 +179,7 @@ public class SqlServerQueryBuilderTests
             filters,
             tableMapping,
             ExecutionPlan.Empty,
-            batchSize: 1000);
+            batchSize: 1000,
+            etaSmoothing: null);
     }
 }

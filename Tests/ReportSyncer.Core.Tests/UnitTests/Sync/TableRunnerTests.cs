@@ -46,8 +46,8 @@ public class TableRunnerTests
 
         writer.Setup(w => w.DeleteAsync(It.IsAny<TableExecutionContext>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
-        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<CancellationToken>()))
-            .Callback<TableExecutionContext, IReadOnlyList<IReadOnlyDictionary<string, object?>>, CancellationToken>((_, rows, _) => capturedRows = rows)
+        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<IProgress<InsertBatchProgress>?>(), It.IsAny<CancellationToken>()))
+            .Callback<TableExecutionContext, IReadOnlyList<IReadOnlyDictionary<string, object?>>, IProgress<InsertBatchProgress>?, CancellationToken>((_, rows, _, _) => capturedRows = rows)
             .ReturnsAsync(2);
 
         var runner = new TableRunner(new InMemoryRowConnectionFactory(sourceRows), writer.Object, new SqlServerQueryBuilder());
@@ -60,7 +60,7 @@ public class TableRunnerTests
         result.RowsInserted.Should().Be(2);
 
         writer.Verify(w => w.DeleteAsync(ctx, It.IsAny<CancellationToken>()), Times.Once);
-        writer.Verify(w => w.InsertAsync(ctx, It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<CancellationToken>()), Times.Once);
+        writer.Verify(w => w.InsertAsync(ctx, It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<IProgress<InsertBatchProgress>?>(), It.IsAny<CancellationToken>()), Times.Once);
         capturedRows.Should().NotBeNull();
         capturedRows!.Should().HaveCount(2);
         capturedRows![0].Should().Contain(new KeyValuePair<string, object?>("CustomerId", 7));
@@ -78,7 +78,7 @@ public class TableRunnerTests
         };
 
         var writer = new Mock<IDataWriter>(MockBehavior.Strict);
-        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<CancellationToken>()))
+        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<IProgress<InsertBatchProgress>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
         var runner = new TableRunner(new InMemoryRowConnectionFactory(sourceRows), writer.Object, new SqlServerQueryBuilder());
@@ -88,7 +88,7 @@ public class TableRunnerTests
 
         result.RowsDeleted.Should().Be(0);
         writer.Verify(w => w.DeleteAsync(It.IsAny<TableExecutionContext>(), It.IsAny<CancellationToken>()), Times.Never);
-        writer.Verify(w => w.InsertAsync(ctx, It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<CancellationToken>()), Times.Once);
+        writer.Verify(w => w.InsertAsync(ctx, It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<IProgress<InsertBatchProgress>?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class TableRunnerTests
         };
 
         var writer = new Mock<IDataWriter>(MockBehavior.Strict);
-        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<CancellationToken>()))
+        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<IProgress<InsertBatchProgress>?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new SyncExecutionException("boom"));
 
         var runner = new TableRunner(new InMemoryRowConnectionFactory(sourceRows), writer.Object, new SqlServerQueryBuilder());
@@ -151,7 +151,8 @@ public class TableRunnerTests
             filters: new[] { new FilterPredicate("CustomerId", FilterOperator.Equals, 7) },
             mapping,
             ExecutionPlan.Empty,
-            batchSize: 1000);
+            batchSize: 1000,
+            etaSmoothing: null);
     }
 
     private sealed class ThrowingConnectionFactory : IDbConnectionFactory

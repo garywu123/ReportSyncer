@@ -36,7 +36,7 @@
     "Full-Core-857": {
       "name": "Full-Core",
       "created": "2025-12-24T06:56:47.663Z",
-      "lastUsed": "2025-12-28T07:59:27.361Z",
+      "lastUsed": "2025-12-31T11:41:03.250Z",
       "tags": [],
       "files": [
         "ReportSyncer.Core/Exceptions",
@@ -44,7 +44,9 @@
         "ReportSyncer.Core/Configuration",
         "ReportSyncer.Core/ReportSyncer.Core.csproj",
         "ReportSyncer.Core/Observability",
-        "ReportSyncer.Core/Sync"
+        "ReportSyncer.Core/Sync",
+        "ReportSyncer.Core/Security",
+        "ReportSyncer.Core/Preflight"
       ],
       "configPath": ".repomix/config/Full-Core-repomix.config.json"
     }

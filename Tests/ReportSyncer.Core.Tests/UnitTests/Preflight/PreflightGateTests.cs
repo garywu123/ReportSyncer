@@ -178,6 +178,6 @@ public class PreflightGateTests
             filters: filters ?? Array.Empty<FilterPredicate>(),
             mapping,
             ExecutionPlan.Empty,
-            batchSize: 1000);
+            batchSize: 1000, etaSmoothing: null);
     }
 }

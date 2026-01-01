@@ -116,6 +116,6 @@ public class PermissionProfilerIntegrationTests
             filters: Array.Empty<FilterPredicate>(),
             mapping,
             ExecutionPlan.Empty,
-            batchSize: 500);
+            batchSize: 500, etaSmoothing: null);
     }
 }

@@ -53,7 +53,7 @@ public class SqlDataWriterTests
             new Dictionary<string, object?> { ["CustomerId"] = 3, ["EventTime"] = DateTime.UtcNow, ["Payload"] = "c" },
         };
 
-        var inserted = await writer.InsertAsync(ctx, rows, CancellationToken.None);
+        var inserted = await writer.InsertAsync(ctx, rows, null, CancellationToken.None);
 
         inserted.Should().Be(3);
         db.ExecutedCommands.Should().HaveCount(2);
@@ -70,7 +70,7 @@ public class SqlDataWriterTests
             new Dictionary<string, object?> { ["CustomerId"] = 10 } // missing EventTime
         };
 
-        var act = () => writer.InsertAsync(ctx, rows, CancellationToken.None);
+        var act = () => writer.InsertAsync(ctx, rows, null, CancellationToken.None);
 
         await act.Should().ThrowAsync<SyncExecutionException>()
             .WithMessage("*EventTime*");
@@ -123,6 +123,7 @@ public class SqlDataWriterTests
             filters: Array.Empty<FilterPredicate>(),
             mapping,
             ExecutionPlan.Empty,
-            batchSize: batchSize);
+            batchSize: batchSize,
+            etaSmoothing: null);
     }
 }

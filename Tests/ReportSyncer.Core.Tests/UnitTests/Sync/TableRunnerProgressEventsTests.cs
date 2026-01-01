@@ -34,7 +34,7 @@ public class TableRunnerProgressEventsTests
     {
         var reporter = new InMemoryProgressReporter();
         var writer = new Mock<IDataWriter>(MockBehavior.Strict);
-        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<CancellationToken>()))
+        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<IProgress<InsertBatchProgress>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(2);
         var runner = CreateRunner(reporter, writer.Object, rows: new List<IReadOnlyDictionary<string, object?>>
         {
@@ -57,7 +57,7 @@ public class TableRunnerProgressEventsTests
     {
         var reporter = new InMemoryProgressReporter();
         var writer = new Mock<IDataWriter>(MockBehavior.Strict);
-        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<CancellationToken>()))
+        writer.Setup(w => w.InsertAsync(It.IsAny<TableExecutionContext>(), It.IsAny<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(), It.IsAny<IProgress<InsertBatchProgress>?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("boom"));
         var runner = CreateRunner(reporter, writer.Object, rows: new List<IReadOnlyDictionary<string, object?>>
         {
@@ -107,7 +107,7 @@ public class TableRunnerProgressEventsTests
             filters: Array.Empty<FilterPredicate>(),
             mapping,
             ExecutionPlan.Empty,
-            batchSize: 1000);
+            batchSize: 1000, etaSmoothing: null);
     }
 
     private class InMemoryRowConnectionFactory : DotNetToolkit.Database.Abstractions.IDbConnectionFactory

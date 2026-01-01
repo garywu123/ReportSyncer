@@ -45,7 +45,7 @@ public class ContractTests
             filters,
             tableMapping,
             executionPlan,
-            batchSize: 100);
+            batchSize: 100, etaSmoothing: null);
 
         // Assert
         context.JobName.Should().Be("Job-1");

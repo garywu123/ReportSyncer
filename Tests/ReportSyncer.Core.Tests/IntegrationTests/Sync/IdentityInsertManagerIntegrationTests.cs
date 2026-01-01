@@ -87,7 +87,7 @@ public class IdentityInsertManagerIntegrationTests
             filters: Array.Empty<FilterPredicate>(),
             tableMapping: mapping,
             executionPlan: ExecutionPlan.Empty,
-            batchSize: 500);
+            batchSize: 500, etaSmoothing: null);
     }
 
     private sealed class PersistentDbContext : IDbContext

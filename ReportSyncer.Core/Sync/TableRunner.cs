@@ -75,7 +75,7 @@ public sealed class TableRunner : ITableRunner
             phase = "Insert";
             var inserted = rows.Count == 0
                 ? 0
-                : await _writer.InsertAsync(ctx, rows, ct).ConfigureAwait(false);
+                : await _writer.InsertAsync(ctx, rows, progress: null, ct).ConfigureAwait(false);
 
             var duration = DateTimeOffset.UtcNow - startedAt;
             return new TableResult(
@@ -189,9 +189,36 @@ public sealed class TableRunner : ITableRunner
                 }
 
                 var rows = await ReadSourceRowsAsync(ctx, ct).ConfigureAwait(false);
+
+                // Create progress tracker for Insert phase
+                var tracker = new Observability.ProgressTracker(
+                    totalPlanned: rows.Count,
+                    emitInterval: TimeSpan.FromSeconds(1),
+                    etaSmoothing: ctx.EtaSmoothing);
+
+                // Create progress callback to emit InProgress events
+                var progress = new Progress<InsertBatchProgress>(batchProgress =>
+                {
+                    tracker.AddProgress(batchProgress.BatchRowsAffected);
+                    if (tracker.TryBuildMetrics(out var metrics))
+                    {
+                        var now = DateTimeOffset.UtcNow;
+                        _progress.Report(new TableProgressEvent(
+                            ctx.JobName,
+                            TableIdentifier.Parse($"{ctx.TargetSchema}.{ctx.TargetTable}"),
+                            ProgressEventKind.InProgress,
+                            SyncPhase.Insert,
+                            now,
+                            Elapsed: now - started,
+                            RowsAffected: (int)metrics.RowsProcessed,
+                            IsDryRun: ctx.DryRun,
+                            Metrics: metrics));
+                    }
+                });
+
                 var inserted = rows.Count == 0
                     ? 0
-                    : await _writer.InsertAsync(ctx, rows, ct).ConfigureAwait(false);
+                    : await _writer.InsertAsync(ctx, rows, progress, ct).ConfigureAwait(false);
 
                 var finished = DateTimeOffset.UtcNow;
                 _progress.Report(new TableProgressEvent(

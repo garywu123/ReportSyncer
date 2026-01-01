@@ -41,6 +41,7 @@ public sealed record TableExecutionContext
     /// <param name="tableMapping">Table mapping information for the sync.</param>
     /// <param name="executionPlan">Execution plan for the sync.</param>
     /// <param name="batchSize">Batch size for batched operations.</param>
+    /// <param name="etaSmoothing">Optional ETA smoothing factor (0..1) for progress tracking.</param>
     public TableExecutionContext(
         Guid jobId,
         string jobName,
@@ -60,7 +61,8 @@ public sealed record TableExecutionContext
         IReadOnlyList<FilterPredicate> filters,
         TableMapping tableMapping,
         ExecutionPlan executionPlan,
-        int batchSize)
+        int batchSize,
+        double? etaSmoothing)
     {
         ArgumentNullException.ThrowIfNull(jobName);
         ArgumentNullException.ThrowIfNull(sourceConnectionName);
@@ -91,6 +93,8 @@ public sealed record TableExecutionContext
             throw new ArgumentException("Context column name cannot be empty or whitespace.", nameof(contextColumnName));
         if (batchSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be greater than zero.");
+        if (etaSmoothing.HasValue && (etaSmoothing.Value < 0.0 || etaSmoothing.Value > 1.0))
+            throw new ArgumentOutOfRangeException(nameof(etaSmoothing), etaSmoothing, "ETA smoothing must be between 0 and 1.");
 
         var filterCopy = filters.ToArray();
         if (filterCopy.Any(f => f is null))
@@ -115,6 +119,7 @@ public sealed record TableExecutionContext
         TableMapping = tableMapping;
         ExecutionPlan = executionPlan;
         BatchSize = batchSize;
+        EtaSmoothing = etaSmoothing;
     }
 
     public Guid JobId { get; }
@@ -158,4 +163,7 @@ public sealed record TableExecutionContext
 
     /// <summary>Batch size to use for batched operations.</summary>
     public int BatchSize { get; }
+
+    /// <summary>Optional ETA smoothing factor (0..1) for progress tracking throughput calculation.</summary>
+    public double? EtaSmoothing { get; }
 }

@@ -162,7 +162,8 @@ public class SqlServerQueryBuilderIntegrationTests
                 Array.Empty<ColumnMapping>(),
                 HasWarnings: false),
             ExecutionPlan.Empty,
-            batchSize: 1000);
+            batchSize: 1000,
+            etaSmoothing: null);
     }
 
     private static TableMapping CreateHistoryEventsMapping()

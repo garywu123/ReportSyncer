@@ -164,7 +164,8 @@ public sealed class WorkEstimator
             filters,
             ctx.TableMapping,
             ctx.ExecutionPlan,
-            ctx.BatchSize);
+            ctx.BatchSize,
+            ctx.EtaSmoothing);
     }
 
     /// <summary>

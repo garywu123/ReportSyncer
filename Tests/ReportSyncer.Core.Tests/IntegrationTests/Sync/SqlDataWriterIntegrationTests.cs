@@ -51,7 +51,7 @@ public class SqlDataWriterIntegrationTests
             new Dictionary<string, object?> { ["CustomerId"] = 11, ["EventId"] = 200, ["EventTime"] = new DateTime(2025,12,27), ["Payload"] = "z" }
         };
 
-        var inserted = await writer.InsertAsync(ctx, rows, CancellationToken.None);
+        var inserted = await writer.InsertAsync(ctx, rows, null, CancellationToken.None);
 
         inserted.Should().Be(3);
         var explicitIds = await _fixture.ExecuteScalarAsync("SELECT COUNT(*) FROM rpt.TargetEvents WHERE EventId IN (100,101,200);");
@@ -109,6 +109,7 @@ public class SqlDataWriterIntegrationTests
             filters: filters,
             tableMapping: mapping,
             executionPlan: ExecutionPlan.Empty,
-            batchSize: batchSize);
+            batchSize: batchSize,
+            etaSmoothing: null);
     }
 }

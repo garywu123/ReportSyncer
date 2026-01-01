@@ -128,7 +128,7 @@ public class WorkEstimatorUnitTests
             filters: Array.Empty<FilterPredicate>(),
             mapping,
             ExecutionPlan.Empty,
-            batchSize: 1000);
+            batchSize: 1000, etaSmoothing: null);
     }
 
     private static Mock<ISqlQueryBuilder> CreateSqlBuilder(Func<TableExecutionContext, DbCommandSpec>? countFactory = null)
