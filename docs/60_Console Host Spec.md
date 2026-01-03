@@ -33,6 +33,32 @@
 - 引入 Run Report / report artifacts 管线。
 - 重构/改造 `ReportSyncer.Core` 架构。
 
+
+## 1.3 Dependencies (OSS Packages)
+
+> Scope: This section lists OSS/NuGet dependencies used by Console Host at runtime, and explains why they exist.
+> Version pinning is REQUIRED to avoid accidental breaking upgrades.
+
+| Package | Category | Purpose / Why we need it | Where it is used | Notes / Constraints |
+|---|---|---|---|---|
+| `Microsoft.Extensions.Hosting` | Hosting | Provides Generic Host (lifetime, DI + config pipeline integration) | `Program.cs` / Host bootstrap | Use as the composition root boundary. |
+| `Microsoft.Extensions.DependencyInjection` | DI | Service registration & resolution | `Program.cs`, `ServiceCollection` | Keep registrations minimal and explicit. |
+| `Microsoft.Extensions.Configuration` | Config | Base configuration APIs | Config bootstrap | Prefer `IOptions<T>` for strongly-typed config. |
+| `Microsoft.Extensions.Configuration.Json` | Config | Load `appsettings.json` | Startup | `reloadOnChange` is optional; do not rely on it for correctness. |
+| `Microsoft.Extensions.Configuration.EnvironmentVariables` | Config | Allow env var overrides | Startup | Used for CI/CD and container overrides. |
+| `Microsoft.Extensions.Options` | Config | Options binding/validation pattern | Options types | Validation SHOULD fail fast and map to ExitCode=3. |
+| `Serilog` | Logging | Structured logging engine | `ILogService` implementation | All logs MUST go through `ILogService`. No ad-hoc `Console.WriteLine`. |
+| `Serilog.Formatting.Compact` | Logging | Compact JSON formatter for file logs | File sink setup | Recommended for JSONL file logs. |
+| `Serilog.Sinks.Async` | Logging | Async buffering to avoid blocking UI/execution threads | Logger pipeline | MUST be used for file sink to avoid IO stalls. |
+| `Serilog.Sinks.Console` | Logging | Human-readable logs to stdout/stderr | Logger pipeline | Console output must not corrupt Spectre layout; prefer routing via UI Area C when live UI is active. |
+| `Serilog.Sinks.File` | Logging | Persist logs to file for later troubleshooting | Logger pipeline | File path & retention rules MUST be defined in config. |
+| `Serilog.Sinks.SpectreConsole` | Logging/UI | Integrates Serilog output with Spectre rendering | Optional | Allowed but MUST NOT bypass UI render loop rules (no cross-thread rendering). |
+| `Spectre.Console` | UI | Rich console rendering (layout/table/live updates) | UI loop, Areas A/B/C | UI thread is the only thread allowed to render. |
+| `Spectre.Console.Cli` | CLI | CLI parsing, command binding, help text | CLI entrypoint | Commands/options MUST match Spec Section 3. |
+| `System.Threading.Channels` | Concurrency | Thread-safe event queue between progress reporters and UI loop | Progress pipeline | Progress reporters MUST only enqueue events; UI loop drains. |
+| `Microsoft.Data.SqlClient` | DB | SQL Server connectivity | Integration scenarios / host-level preflight (only if required) | Console Host SHOULD NOT own DB access unless explicitly required by Spec; prefer Core to own DB operations. |
+
+
 ---
 
 ## 2. Host 边界（职责规则）
