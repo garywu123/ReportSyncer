@@ -4,18 +4,17 @@
 
 using System;
 
-namespace ReportSyncer.Core.Sync.Contracts
-{
-    /// <summary>
-    /// Result summary for a single table within a sync job.
-    /// </summary>
-    public sealed record TableResult(
-        string TargetTable,
-        TableStatus Status,
-        long? RowsDeleted = null,
-        long? RowsInserted = null,
-        TimeSpan? Duration = null,
-        string? ErrorCode = null,
-        string? ErrorMessage = null
-    );
-}
+namespace ReportSyncer.Core.Sync.Contracts;
+
+/// <summary>
+/// Result summary for a single table within a sync job.
+/// </summary>
+public sealed record TableResult(
+    string      TargetTable,
+    TableStatus Status,
+    long?       RowsDeleted  = null,
+    long?       RowsInserted = null,
+    TimeSpan?   Duration     = null,
+    string?     ErrorCode    = null,
+    string?     ErrorMessage = null
+);

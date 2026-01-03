@@ -6,39 +6,38 @@
 // Description: Enumeration defining environment types for database connections.
 // ============================================================================
 
-namespace ReportSyncer.Core.Configuration
+namespace ReportSyncer.Core.Configuration;
+
+/// <summary>
+/// Environment types (Dev, Prod, etc.).
+/// </summary>
+/// <summary>
+/// Environment types (Dev, Prod, etc.).
+/// </summary>
+public enum EnvironmentType
 {
     /// <summary>
-    /// Environment types (Dev, Prod, etc.).
+    /// Production environment.
     /// </summary>
+    Prod,
+
     /// <summary>
-    /// Environment types (Dev, Prod, etc.).
+    /// Development environment.
     /// </summary>
-    public enum EnvironmentType
-    {
-        /// <summary>
-        /// Production environment.
-        /// </summary>
-        Prod,
+    Dev,
 
-        /// <summary>
-        /// Development environment.
-        /// </summary>
-        Dev,
+    /// <summary>
+    /// Test/QA environment.
+    /// </summary>
+    Test,
 
-        /// <summary>
-        /// Test/QA environment.
-        /// </summary>
-        Test,
+    /// <summary>
+    /// Staging environment.
+    /// </summary>
+    Staging,
 
-        /// <summary>
-        /// Staging environment.
-        /// </summary>
-        Staging,
-
-        /// <summary>
-        /// Reporting environment.
-        /// </summary>
-        Reporting
-    }
+    /// <summary>
+    /// Reporting environment.
+    /// </summary>
+    Reporting
 }

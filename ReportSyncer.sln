@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36717.8 d17.14
+# Visual Studio Version 18
+VisualStudioVersion = 18.1.11304.174 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReportSyncer.Console", "ReportSyncer.Console\ReportSyncer.Console.csproj", "{80B59569-36A4-4875-9BD3-B77D84CCBD38}"
 EndProject
@@ -21,11 +21,15 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{81032739
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{57015F2C-FCB8-43CF-AD46-26F7CAB6A8AA}"
 	ProjectSection(SolutionItems) = preProject
-		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\10_Product Requirements Document.Instruction.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\10_Product Requirements Document.Instruction.md
-		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\20_ReportSyncer Backend Architecture.instruction.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\20_ReportSyncer Backend Architecture.instruction.md
-		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\30_ReportSyncer Backend Arch.instruction.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\30_ReportSyncer Backend Arch.instruction.md
-		..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\40_Backend Implementation Plan.md = ..\..\OneDrive - Crown Equipment Corporation\Documents\Markdown Docs\06_Work\Code Projects\Report Syncer\current\40_Backend Implementation Plan.md
+		docs\10_Product Requirements Document.Instruction.md = docs\10_Product Requirements Document.Instruction.md
+		docs\20_ReportSyncer Backend Architecture.instruction.md = docs\20_ReportSyncer Backend Architecture.instruction.md
+		docs\30_ReportSyncer Backend Detail Arch.md = docs\30_ReportSyncer Backend Detail Arch.md
+		docs\40_Backend Implementation Plan.md = docs\40_Backend Implementation Plan.md
+		docs\60_Console Host Spec.md = docs\60_Console Host Spec.md
+		docs\61_Console Implementation Plan.md = docs\61_Console Implementation Plan.md
 	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ImplementationSteps", "ImplementationSteps", "{D64BDB7D-6AB4-4AA7-98F4-F9C52EE02D35}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -65,6 +69,7 @@ Global
 		{8468D388-AEA2-39FC-676D-3EAA2AB40330} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{A9555FD3-856B-F153-63A6-CF49EAF21D95} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{021971B3-A02E-49AE-BF35-2CEEFB0E4161} = {81032739-219D-457C-8C6B-4342748C3BE8}
+		{D64BDB7D-6AB4-4AA7-98F4-F9C52EE02D35} = {57015F2C-FCB8-43CF-AD46-26F7CAB6A8AA}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {196A4772-4BA1-4A45-8171-E759B2EC642D}

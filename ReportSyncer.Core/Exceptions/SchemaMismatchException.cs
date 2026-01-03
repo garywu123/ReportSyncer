@@ -1,8 +1,7 @@
-namespace ReportSyncer.Core.Exceptions
+namespace ReportSyncer.Core.Exceptions;
+
+public class SchemaMismatchException : Exception
 {
-    public class SchemaMismatchException : Exception
-    {
-        public SchemaMismatchException(string message) : base(message) { }
-        public SchemaMismatchException(string message, Exception inner) : base(message, inner) { }
-    }
+    public SchemaMismatchException(string message) : base(message) { }
+    public SchemaMismatchException(string message, Exception inner) : base(message, inner) { }
 }
