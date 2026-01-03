@@ -1,66 +1,56 @@
-# copilot #ReportSyncer  
+# copilot #ReportSyncer
+
 ## Overview
-This document describes guidance for working across the ReportSyncer solution and the shared DotNetToolkit libraries. It covers repository contents, C# generation rules, layering constraints, exception usage, guidance for adding new behavior, and code style requirements.
+This repository contains the ReportSyncer solution and shared DotNetToolkit libraries.
+Follow strict layering. Keep hosts thin. Keep domain logic in Core.
 
-## Repository Contents
-### ReportSyncer
-- ReportSyncer backend (domain + hosts) for database sync.
+## Solution Structure
+- `ReportSyncer.Core`: domain + orchestration + schema/preflight/safety/sql/write logic.
+- `ReportSyncer.Console`: Console Host (composition root + CLI + UI rendering + exit codes + logging).
+- `ReportSyncer.WebApi`: Web API Host (thin shell).
+- `DotNetToolkit.*`: shared infrastructure libraries (no dependency on ReportSyncer).
 
-### DotNetToolkit
-DotNetToolkit contains shared infrastructure libraries used by ReportSyncer and other products:
-- `DotNetToolkit.General`: general-purpose utilities.
-- `DotNetToolkit.Database`: database abstraction layer used across products.
-- `DotNetToolkit.Logging`: logging abstractions.
+## Canonical Docs (Docs folder)
+- `docs/10_Product Requirements Document.Instruction.md`
+- `docs/20_ReportSyncer Backend Architecture.instruction.md`
+- `docs/30_ReportSyncer Backend Detail Arch.md`
+- `docs/40_Backend Implementation Plan.md`
+- `docs/60_Console Host Spec.md`
+- `docs/61_Console Implementation Plan.md`
 
-
-### Addtional Instructions
-- .github/instructions/report-syncer-core.instructions.mdL: Rules for code inside ReportSyncer.Core (domain layer)
-- .github/instructions/tests.instructions.md: Rules for writing tests in ReportSyncer.Tests
-- .github/instructions/dotnetoolkit.instructions.md: Rules for contributing to DotNetToolkit libraries
-
-### Documentation
-Canonical backend docs live in `docs/`:
-- `10_Product Requirements Document.instruction.md`
-- `20_ReportSyncer Backend Project Instruction.instruction.md`
-- `30_ReportSyncer Backend Detail Arch.md`
-- `40_Backend Implementation Plan.md`
+## Instruction Files (Path-specific)
+- `.github/instructions/report-syncer-core.instructions.md`: rules for `ReportSyncer.Core`
+- `.github/instructions/report-syncer-console.instructions.md`: rules for `ReportSyncer.Console`
+- `.github/instructions/tests.instructions.md`: shared testing rules (Core tests)
+- `.github/instructions/report-syncer-console-tests.instructions.md`: rules for `ReportSyncer.Console.Tests`
+- `.github/instructions/dotnetoolkit.instructions.md`: rules for `DotNetToolkit.*`
 
 ## C# Generation Guidelines
-- **Target:** `net10.0` and modern C# features (records, pattern matching, array and collection initializers, `async`/`await`, nullable reference types, object and collection initializers, etc.).
-- **DI:** Use `Microsoft.Extensions.DependencyInjection` for DI abstractions.
-- **Logging:** From domain code, log via `DotNetToolkit.Logging.ILogService` only. Hosts may wire Serilog; do not use Serilog directly in `ReportSyncer.Core`.
-- **Database:** Use `DotNetToolkit.Database` abstractions (`IDbContext`, `IDbCommandWrapper`, etc.) for DB access. Do not use Entity Framework.
+- Target `net10.0`, modern C# features, nullable reference types enabled.
+- DI: use `Microsoft.Extensions.DependencyInjection`.
+- Database: use `DotNetToolkit.Database` abstractions; do not use EF.
+- Logging:
+  - In Core: log via `DotNetToolkit.Logging.ILogService` only.
+  - Hosts may wire Serilog sinks, but Core must not reference Serilog.
 
-## Layering Rules
-- `ReportSyncer.Core` may depend on `DotNetToolkit.*` but must never depend on `ReportSyncer.Console` or `ReportSyncer.WebApi`.
+## Layering Rules (Hard)
+- `ReportSyncer.Core` may depend on `DotNetToolkit.*` but must never depend on hosts.
 - `DotNetToolkit.*` must never depend on any `ReportSyncer.*` project or domain exception types.
-- Hosts (`ReportSyncer.Console`, `ReportSyncer.WebApi`) are thin shells for DI, configuration, process/HTTP lifecycle, and progress output — do not add business rules in hosts.
+- Hosts (`ReportSyncer.Console`, `ReportSyncer.WebApi`) are thin shells. No business rules in hosts.
 
-## Exception Types (Preferred Domain Exceptions)
+## Domain Exception Types (Preferred)
 - `ConfigurationException` — YAML/argument/config problems.
-- `SchemaMismatchException` — schema / dependency / mapping issues.
-- `SafetyViolationException` — guardrail violations (e.g., prod→prod, unsafe deletes).
+- `SchemaMismatchException` — schema/dependency/mapping issues.
+- `SafetyViolationException` — guardrail violations.
 - `SyncExecutionException` — runtime DB/IO failures after pre-flight.
-- `UserCancelledException` — when the user cancels a running job.
+- `UserCancelledException` — user-initiated cancellation.
 
-## Adding New Behavior in `ReportSyncer.Core`
-- **Prefer** extending existing interfaces from the backend architecture docs (e.g., `IConfigurationLoader`, `ISchemaInspector`, `IDependencyResolver`, `ISyncOrchestrator`, `IDataWriter`, `IHistoryService`).
-- Keep classes testable and side-effect free where possible; use abstractions like `IClock` and `INamedDbContextFactory`.
-- Always add or update tests in `ReportSyncer.Tests` following the Test Surfaces & Seams guidance in the architecture docs.
+## Adding New Behavior
+- Prefer extending existing interfaces in the architecture docs.
+- Keep classes testable; use abstractions like `IClock` when needed.
+- Always add/update tests in the appropriate test project.
 
 ## Code Style
-
-### Documentation
-1. Each class should include a summary of its responsibilities. Each method should have a summary, parameter descriptions, return information and exception.
-### File Header Requirements
-Each class file should include a header comment describing the file's purpose and any important details:
-- **Author:** Gary Wu
-- **Project:** ReportSyncer
-- **Date:** Today's date
-### XML Documentation
-- Place different documentation purposes inside the appropriate XML tags.
-- Wrap code examples inside a `CDATA` section within `<code>` if included in XML docs.
-- Use `<remarks>` for additional important information about classes or methods.
-
-### Terminology
-- Use consistent terminology across the codebase.
+- XML docs required for public types and key methods.
+- Prefer clear, explicit naming and small methods.
+- Avoid magic defaults: validate inputs early and provide actionable error messages.
