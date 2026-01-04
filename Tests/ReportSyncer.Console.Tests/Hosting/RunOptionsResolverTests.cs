@@ -17,7 +17,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions("cli.yaml", false);
-        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", true));
+        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", true), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -35,7 +35,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions(null, null);
-        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", true));
+        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", true), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -53,7 +53,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions(null, null);
-        var appSettings = new HostAppSettings(new HostRunSettings(null, null));
+        var appSettings = new HostAppSettings(new HostRunSettings(null, null), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -71,7 +71,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions(null, false);
-        var appSettings = new HostAppSettings(new HostRunSettings(null, true));
+        var appSettings = new HostAppSettings(new HostRunSettings(null, true), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -88,7 +88,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions(null, null);
-        var appSettings = new HostAppSettings(new HostRunSettings(null, true));
+        var appSettings = new HostAppSettings(new HostRunSettings(null, true), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -105,7 +105,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions(null, null);
-        var appSettings = new HostAppSettings(new HostRunSettings(null, null));
+        var appSettings = new HostAppSettings(new HostRunSettings(null, null), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -122,7 +122,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions(null, null);
-        var appSettings = new HostAppSettings(null);
+        var appSettings = new HostAppSettings(null, null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -140,7 +140,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions("cli.yaml", null);
-        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", false));
+        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", false), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -158,7 +158,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions(null, true);
-        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", false));
+        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", false), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -176,7 +176,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions("   ", null);
-        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", null));
+        var appSettings = new HostAppSettings(new HostRunSettings("app.yaml", null), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
@@ -193,7 +193,7 @@ public sealed class RunOptionsResolverTests
     {
         // Arrange
         var cli = new CliRunOptions(null, null);
-        var appSettings = new HostAppSettings(new HostRunSettings("   ", null));
+        var appSettings = new HostAppSettings(new HostRunSettings("   ", null), null, null);
 
         // Act
         var (ok, options, error) = RunOptionsResolver.Resolve(cli, appSettings);
