@@ -127,8 +127,8 @@ public sealed class ConsoleCompositionRoot
         // Register JobScopeOrchestratorFactory
         services.AddSingleton<JobScopeOrchestratorFactory>();
 
-        // Register Console Host services
-        // (Progress reporter, UI components, etc. will be added in later tasks)
+        // UI components will be created and wired in Program.cs
+        // Reporter registration will be handled there to avoid tight coupling
 
         return services.BuildServiceProvider();
     }

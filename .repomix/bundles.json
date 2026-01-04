@@ -49,6 +49,16 @@
         "ReportSyncer.Core/Preflight"
       ],
       "configPath": ".repomix/config/Full-Core-repomix.config.json"
+    },
+    "Full-Console-520": {
+      "name": "FullRepo-Console",
+      "created": "2026-01-04T22:43:16.780Z",
+      "lastUsed": "2026-01-04T22:45:26.167Z",
+      "tags": [],
+      "files": [
+        "ReportSyncer.Console"
+      ],
+      "configPath": "/.repomix/config/Full-Console-repomix.config.json"
     }
   }
 }
