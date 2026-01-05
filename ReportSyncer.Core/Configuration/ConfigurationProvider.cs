@@ -6,7 +6,7 @@
 // Description: Implementation of IConfigurationProvider that loads, validates, and applies runtime overrides.
 // ============================================================================
 
-using DotNetToolkit.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace ReportSyncer.Core.Configuration;
 
@@ -28,7 +28,7 @@ public class ConfigurationProvider : IConfigurationProvider
 {
     private readonly IConfigurationLoader _loader;
     private readonly IConfigurationValidator _validator;
-    private readonly ILogService _log;
+    private readonly ILogger<ConfigurationProvider> _logger;
 
     /// <summary>
     /// Constructs a new <see cref="ConfigurationProvider"/>.
@@ -36,11 +36,11 @@ public class ConfigurationProvider : IConfigurationProvider
     public ConfigurationProvider(
         IConfigurationLoader loader,
         IConfigurationValidator validator,
-        ILogService log)
+        ILogger<ConfigurationProvider> logger)
     {
         _loader = loader ?? throw new ArgumentNullException(nameof(loader));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />

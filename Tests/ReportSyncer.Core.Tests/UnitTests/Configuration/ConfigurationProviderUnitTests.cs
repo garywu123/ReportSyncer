@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Tests.Helpers;
 
@@ -12,9 +13,9 @@ public class ConfigurationProviderUnitTests
         var baseCfg = ConfigurationTestData.CreateMinimalValidConfig();
         var loader = new FakeLoader(baseCfg);
         var validator = new FakeValidator();
-        var log = new DummyLogService();
+        var logger = NullLogger<ConfigurationProvider>.Instance;
 
-        var provider = new ConfigurationProvider(loader, validator, log);
+        var provider = new ConfigurationProvider(loader, validator, logger);
 
         var result = await provider.LoadAndValidateAsync("some-path.yaml", CancellationToken.None);
 
@@ -30,9 +31,9 @@ public class ConfigurationProviderUnitTests
         var baseCfg = ConfigurationTestData.CreateMinimalValidConfig();
         var loader = new FakeLoader(baseCfg);
         var validator = new FakeValidator();
-        var log = new DummyLogService();
+        var logger = NullLogger<ConfigurationProvider>.Instance;
 
-        var provider = new ConfigurationProvider(loader, validator, log);
+        var provider = new ConfigurationProvider(loader, validator, logger);
 
         var overrides = new RuntimeOverrides { DryRun = false, DefaultBatchSize = 2000 };
 
@@ -51,9 +52,9 @@ public class ConfigurationProviderUnitTests
         var baseCfg = ConfigurationTestData.CreateMinimalValidConfig();
         var loader = new FakeLoader(baseCfg);
         var validator = new FakeValidator();
-        var log = new DummyLogService();
+        var logger = NullLogger<ConfigurationProvider>.Instance;
 
-        var provider = new ConfigurationProvider(loader, validator, log);
+        var provider = new ConfigurationProvider(loader, validator, logger);
 
         var overrides = new RuntimeOverrides { DefaultBatchSize = 0 };
 

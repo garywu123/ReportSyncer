@@ -39,8 +39,7 @@ public sealed class CompositionRootSmokeTests
         var services = new ServiceCollection();
         services.AddSingleton(mockConfigProvider.Object);
         services.AddSingleton<IConfigurationLoader, YamlConfigurationLoader>();
-        services.AddSingleton<DotNetToolkit.Logging.ILogService>(
-            Mock.Of<DotNetToolkit.Logging.ILogService>());
+        services.AddLogging();
 
         var bootstrapProvider = services.BuildServiceProvider();
 
@@ -49,7 +48,7 @@ public sealed class CompositionRootSmokeTests
         finalServices.AddSingleton(mockConfigProvider.Object);
         
         // Add required mocks for ConfigurationProvider dependencies
-        services.AddSingleton(Mock.Of<DotNetToolkit.Logging.ILogService>());
+        services.AddLogging();
         services.AddSingleton(Mock.Of<IConfigurationValidator>());
         
         finalServices.AddReportSyncerRootServices(effectiveConfig.Connections.ToList());
@@ -72,7 +71,7 @@ public sealed class CompositionRootSmokeTests
         var services = new ServiceCollection();
         
         // Add required mocks for ConfigurationProvider dependencies
-        services.AddSingleton(Mock.Of<DotNetToolkit.Logging.ILogService>());
+        services.AddLogging();
         services.AddSingleton(Mock.Of<IConfigurationValidator>());
         
         services.AddReportSyncerRootServices(effectiveConfig.Connections.ToList());
@@ -97,7 +96,7 @@ public sealed class CompositionRootSmokeTests
         services.AddSingleton<IServiceProvider>(sp => sp);
         
         // Add required mocks for ConfigurationProvider dependencies
-        services.AddSingleton(Mock.Of<DotNetToolkit.Logging.ILogService>());
+        services.AddLogging();
         services.AddSingleton(Mock.Of<IConfigurationValidator>());
         
         services.AddReportSyncerRootServices(effectiveConfig.Connections.ToList());
@@ -121,7 +120,7 @@ public sealed class CompositionRootSmokeTests
         services.AddSingleton<IServiceProvider>(sp => sp);
         
         // Add required mocks for ConfigurationProvider dependencies
-        services.AddSingleton(Mock.Of<DotNetToolkit.Logging.ILogService>());
+        services.AddLogging();
         services.AddSingleton(Mock.Of<IConfigurationValidator>());
         
         services.AddReportSyncerRootServices(effectiveConfig.Connections.ToList());
@@ -146,8 +145,8 @@ public sealed class CompositionRootSmokeTests
         
         services.AddSingleton<IServiceProvider>(sp => sp);
         
-        // Add required mocks for ConfigurationProvider dependencies
-        services.AddSingleton(Mock.Of<DotNetToolkit.Logging.ILogService>());
+        // Add logging infrastructure required by Core services
+        services.AddLogging();
         services.AddSingleton(Mock.Of<IConfigurationValidator>());
         
         services.AddReportSyncerRootServices(effectiveConfig.Connections.ToList());

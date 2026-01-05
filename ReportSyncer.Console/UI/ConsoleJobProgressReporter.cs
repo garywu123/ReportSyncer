@@ -6,7 +6,7 @@
 // Description: IJobProgressReporter adapter that enqueues events to UiEventQueue.
 // ============================================================================
 
-using DotNetToolkit.Logging;
+using Microsoft.Extensions.Logging;
 using ReportSyncer.Core.Observability;
 
 namespace ReportSyncer.Console.UI;
@@ -22,17 +22,17 @@ namespace ReportSyncer.Console.UI;
 public sealed class ConsoleJobProgressReporter : IJobProgressReporter
 {
     private readonly UiEventQueue _queue;
-    private readonly ILogService _log;
+    private readonly ILogger<ConsoleJobProgressReporter> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ConsoleJobProgressReporter"/>.
     /// </summary>
     /// <param name="queue">Target queue for UI events.</param>
-    /// <param name="log">Log service for warnings.</param>
-    public ConsoleJobProgressReporter(UiEventQueue queue, ILogService log)
+    /// <param name="logger">Logger for warnings.</param>
+    public ConsoleJobProgressReporter(UiEventQueue queue, ILogger<ConsoleJobProgressReporter> logger)
     {
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
@@ -43,13 +43,13 @@ public sealed class ConsoleJobProgressReporter : IJobProgressReporter
     {
         if (evt is null)
         {
-            _log.LogWarning("ConsoleJobProgressReporter received null JobProgressEvent");
+            _logger.LogWarning("ConsoleJobProgressReporter received null JobProgressEvent");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(evt.JobId))
         {
-            _log.LogWarning("ConsoleJobProgressReporter received JobProgressEvent with empty JobId");
+            _logger.LogWarning("ConsoleJobProgressReporter received JobProgressEvent with empty JobId");
             return;
         }
 
@@ -60,7 +60,7 @@ public sealed class ConsoleJobProgressReporter : IJobProgressReporter
 
         if (!_queue.TryEnqueue(uiEvent))
         {
-            _log.LogWarning($"Failed to enqueue JobProgressEvent for JobId={evt.JobId}");
+            _logger.LogWarning("Failed to enqueue JobProgressEvent for JobId={JobId}", evt.JobId);
         }
     }
 
@@ -72,19 +72,19 @@ public sealed class ConsoleJobProgressReporter : IJobProgressReporter
     {
         if (evt is null)
         {
-            _log.LogWarning("ConsoleJobProgressReporter received null TableProgressEvent");
+            _logger.LogWarning("ConsoleJobProgressReporter received null TableProgressEvent");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(evt.JobId))
         {
-            _log.LogWarning("ConsoleJobProgressReporter received TableProgressEvent with empty JobId");
+            _logger.LogWarning("ConsoleJobProgressReporter received TableProgressEvent with empty JobId");
             return;
         }
 
         if (evt.Table is null)
         {
-            _log.LogWarning("ConsoleJobProgressReporter received TableProgressEvent with null Table");
+            _logger.LogWarning("ConsoleJobProgressReporter received TableProgressEvent with null Table");
             return;
         }
 
@@ -95,7 +95,7 @@ public sealed class ConsoleJobProgressReporter : IJobProgressReporter
 
         if (!_queue.TryEnqueue(uiEvent))
         {
-            _log.LogWarning($"Failed to enqueue TableProgressEvent for Table={evt.Table}");
+            _logger.LogWarning("Failed to enqueue TableProgressEvent for Table={Table}", evt.Table);
         }
     }
 }

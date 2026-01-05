@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using ReportSyncer.Core.Configuration;
 
 
@@ -25,7 +26,7 @@ public static class ConfigurationYamlTestHelper
         if (!File.Exists(path))
             throw new FileNotFoundException($"Test YAML not found: {path}", path);
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         return await loader.LoadAsync(path, ct).ConfigureAwait(false);
     }
 }

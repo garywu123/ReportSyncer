@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Tests.Helpers;
 
@@ -84,7 +85,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = GetTestFilePath("sync_valid_minimal.yaml");
         Assert.True(File.Exists(path), $"Test YAML not found: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         var cfg = await loader.LoadAsync(path, CancellationToken.None);
 
         Assert.NotNull(cfg);
@@ -107,7 +108,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = GetTestFilePath("sync_valid_full.yaml");
         Assert.True(File.Exists(path), $"Test YAML not found: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         var cfg = await loader.LoadAsync(path, CancellationToken.None);
 
         Assert.NotNull(cfg);
@@ -144,7 +145,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = GetTestFilePath("sync_invalid_unknown_key.yaml");
         Assert.True(File.Exists(path), $"Test YAML not found: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         await Assert.ThrowsAsync<ConfigurationException>(async () =>
         {
             await loader.LoadAsync(path, CancellationToken.None);
@@ -157,7 +158,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = GetTestFilePath("sync_invalid_wrong_primitive_type.yaml");
         Assert.True(File.Exists(path), $"Test YAML not found: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         await Assert.ThrowsAsync<ConfigurationException>(async () =>
         {
             await loader.LoadAsync(path, CancellationToken.None);
@@ -170,7 +171,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = GetTestFilePath("sync_invalid_schema_policy_value.yaml");
         Assert.True(File.Exists(path), $"Test YAML not found: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         await Assert.ThrowsAsync<ConfigurationException>(async () =>
         {
             await loader.LoadAsync(path, CancellationToken.None);
@@ -183,7 +184,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = GetTestFilePath("sync_invalid_syntax.yaml");
         Assert.True(File.Exists(path), $"Test YAML not found: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         await Assert.ThrowsAsync<ConfigurationException>(async () =>
         {
             await loader.LoadAsync(path, CancellationToken.None);
@@ -196,7 +197,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = Path.Combine(Path.GetTempPath(), $"nonexistent_config_{Guid.NewGuid():N}.yaml");
         Assert.False(File.Exists(path), $"Test file unexpectedly exists: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         await Assert.ThrowsAsync<FileNotFoundException>(async () =>
         {
             await loader.LoadAsync(path, CancellationToken.None);
@@ -209,7 +210,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = GetTestFilePath("sync_with_placeholders.yaml");
         Assert.True(File.Exists(path), $"Test YAML not found: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         var cfg = await loader.LoadAsync(path, CancellationToken.None);
 
         Assert.NotNull(cfg);
@@ -232,7 +233,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = GetTestFilePath("sync_ignore_dependencies.yaml");
         Assert.True(File.Exists(path), $"Test YAML not found: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         var cfg = await loader.LoadAsync(path, CancellationToken.None);
 
         Assert.NotNull(cfg);
@@ -248,7 +249,7 @@ public class YamlConfigurationLoaderUnitTests
         var path = GetTestFilePath("sync_explicitMappings_only.yaml");
         Assert.True(File.Exists(path), $"Test YAML not found: {path}");
 
-        var loader = new YamlConfigurationLoader(new DummyLogService());
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         var cfg = await loader.LoadAsync(path, CancellationToken.None);
 
         Assert.NotNull(cfg);

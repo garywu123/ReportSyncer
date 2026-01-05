@@ -8,16 +8,16 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ReportSyncer.Console.Logging;
 using ReportSyncer.Core.Configuration;
 using Serilog;
-using Serilog.Events;
 
 namespace ReportSyncer.Console.Hosting;
 
 /// <summary>
 /// Builds the Console Host's dependency injection container in two phases:
-/// 1. Bootstrap phase: minimal services for configuration loading
-/// 2. Final phase: complete service graph including connection-dependent services
+/// 1. Bootstrap phase: minimal services for configuration loading (uses FallbackLogger)
+/// 2. Final phase: complete service graph including connection-dependent services (uses Serilog)
 /// </summary>
 /// <remarks>
 /// The two-phase build is necessary because:
@@ -27,6 +27,9 @@ namespace ReportSyncer.Console.Hosting;
 /// 
 /// This approach allows the effective configuration to be loaded once and used to properly
 /// wire all connection-dependent services.
+/// 
+/// The Serilog logger must be created and configured in Program.cs before calling BuildAsync,
+/// as it requires settings from appsettings.json that are loaded at startup.
 /// </remarks>
 public sealed class ConsoleCompositionRoot
 {
@@ -34,6 +37,7 @@ public sealed class ConsoleCompositionRoot
     /// Builds a complete service provider with loaded configuration.
     /// </summary>
     /// <param name="configPath">Path to the YAML configuration file.</param>
+    /// <param name="serilogLogger">The configured Serilog logger from Program.cs.</param>
     /// <param name="overrides">Optional runtime overrides to apply during configuration loading.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>
@@ -44,20 +48,27 @@ public sealed class ConsoleCompositionRoot
     /// </exception>
     public async Task<ConsoleHost> BuildAsync(
         string configPath,
+        Serilog.ILogger serilogLogger,
         RuntimeOverrides? overrides,
         CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
+        ArgumentNullException.ThrowIfNull(serilogLogger);
 
-        // Phase 1: Bootstrap provider for configuration loading
+        // Phase 1: Bootstrap provider for configuration loading (uses FallbackLogger)
+        using var fallbackLogger = new FallbackLogger();
+        fallbackLogger.Information("Starting configuration loading (bootstrap phase)");
+
         var bootstrapProvider = BuildBootstrapProvider();
 
         // Load effective configuration using bootstrap provider
         var configProvider = bootstrapProvider.GetRequiredService<IConfigurationProvider>();
         var effectiveConfig = await configProvider.LoadAndValidateAsync(configPath, overrides, ct);
 
-        // Phase 2: Final provider with connection-dependent services
-        var finalProvider = BuildFinalProvider(effectiveConfig, bootstrapProvider);
+        fallbackLogger.Information($"Configuration loaded successfully: {effectiveConfig.SyncJobs.Count} job(s)");
+
+        // Phase 2: Final provider with connection-dependent services (uses Serilog)
+        var finalProvider = BuildFinalProvider(effectiveConfig, serilogLogger);
 
         return new ConsoleHost(finalProvider, effectiveConfig, configPath, overrides);
     }
@@ -65,10 +76,12 @@ public sealed class ConsoleCompositionRoot
     /// <summary>
     /// Phase 1: Builds a minimal service provider for configuration loading.
     /// </summary>
+    /// <param name="fallbackLogger">Simple logger for bootstrap phase diagnostics (not injected, used directly in BuildAsync).</param>
     /// <remarks>
-    /// Bootstrap provider includes only:
-    /// - Logging (Serilog with basic console sink)
-    /// - Configuration loading and validation services
+    /// Bootstrap provider includes only configuration loading and validation services.
+    /// No logging provider is registered here because:
+    /// - FallbackLogger is used directly in BuildAsync for bootstrap diagnostics
+    /// - ConfigurationLoader/ConfigurationProvider do not require ILogger dependencies
     /// 
     /// This provider is used to load the effective configuration before building the final provider.
     /// </remarks>
@@ -76,26 +89,9 @@ public sealed class ConsoleCompositionRoot
     {
         var services = new ServiceCollection();
 
-        // Configure Serilog for bootstrap phase
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
-            .WriteTo.Console(
-                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
-                restrictedToMinimumLevel: LogEventLevel.Information)
-            .CreateLogger();
-
-        services.AddLogging(builder =>
-        {
-            builder.ClearProviders();
-            builder.AddSerilog(Log.Logger, dispose: false);
-        });
-
         // Register configuration loading services
         services.AddSingleton<IConfigurationLoader, YamlConfigurationLoader>();
         services.AddSingleton<IConfigurationProvider, ConfigurationProvider>();
-
-        // Register ILogService for Core components
-        services.AddSingleton<DotNetToolkit.Logging.ILogService, DotNetToolkit.Logging.Services.SerilogLogService>();
 
         return services.BuildServiceProvider();
     }
@@ -104,22 +100,23 @@ public sealed class ConsoleCompositionRoot
     /// Phase 2: Builds the final service provider with all services including connection-dependent ones.
     /// </summary>
     /// <param name="effectiveConfig">The loaded effective configuration.</param>
-    /// <param name="bootstrapProvider">The bootstrap provider (for copying over logging configuration).</param>
+    /// <param name="serilogLogger">The configured Serilog logger from Program.cs.</param>
+    /// <remarks>
+    /// This method registers the provided Serilog logger (which was configured with RingBuffer, File, 
+    /// and Console sinks in Program.cs) as the Microsoft.Extensions.Logging provider.
+    /// </remarks>
     private ServiceProvider BuildFinalProvider(
         SyncConfiguration effectiveConfig,
-        ServiceProvider bootstrapProvider)
+        Serilog.ILogger serilogLogger)
     {
         var services = new ServiceCollection();
 
-        // Copy logging configuration from bootstrap
+        // Register the already-configured Serilog logger from Program.cs
         services.AddLogging(builder =>
         {
             builder.ClearProviders();
-            builder.AddSerilog(Log.Logger, dispose: false);
+            builder.AddSerilog(serilogLogger, dispose: false);
         });
-
-        // Register ILogService for Core
-        services.AddSingleton<DotNetToolkit.Logging.ILogService, DotNetToolkit.Logging.Services.SerilogLogService>();
 
         // Register Core services with connection bindings
         services.AddReportSyncerRootServices(effectiveConfig.Connections.ToList());

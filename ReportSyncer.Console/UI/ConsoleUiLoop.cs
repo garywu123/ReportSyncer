@@ -6,7 +6,7 @@
 // Description: Main UI rendering loop with keyboard input handling.
 // ============================================================================
 
-using DotNetToolkit.Logging;
+using Microsoft.Extensions.Logging;
 using ReportSyncer.Console.Logging;
 using ReportSyncer.Core.Sync.Contracts;
 
@@ -22,7 +22,7 @@ public sealed class ConsoleUiLoop
     private readonly UiStateStore _store;
     private readonly AreaBPager _pager;
     private readonly RingBufferLogStore _logStore;
-    private readonly ILogService _log;
+    private readonly ILogger<ConsoleUiLoop> _logger;
     private readonly bool _interactive;
 
     /// <summary>
@@ -32,19 +32,19 @@ public sealed class ConsoleUiLoop
     /// <param name="store">State store to update.</param>
     /// <param name="pager">Pager for Area B.</param>
     /// <param name="logStore">Log store for Area C.</param>
-    /// <param name="log">Log service for errors.</param>
+    /// <param name="logger">Logger for errors.</param>
     public ConsoleUiLoop(
         UiEventQueue queue,
         UiStateStore store,
         AreaBPager pager,
         RingBufferLogStore logStore,
-        ILogService log)
+        ILogger<ConsoleUiLoop> logger)
     {
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _pager = pager ?? throw new ArgumentNullException(nameof(pager));
         _logStore = logStore ?? throw new ArgumentNullException(nameof(logStore));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _interactive = !System.Console.IsInputRedirected;
     }
@@ -95,7 +95,7 @@ public sealed class ConsoleUiLoop
             }
             catch (Exception ex)
             {
-                _log.LogError($"ConsoleUiLoop encountered unexpected error: {ex.Message}");
+                _logger.LogError(ex, "ConsoleUiLoop encountered unexpected error");
                 // Continue loop - don't crash UI
             }
         }
@@ -158,7 +158,7 @@ public sealed class ConsoleUiLoop
         }
         catch (Exception ex)
         {
-            _log.LogError($"Render failed: {ex.Message}");
+            _logger.LogError(ex, "Render failed");
         }
     }
 

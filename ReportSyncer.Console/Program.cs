@@ -37,20 +37,28 @@ internal class Program
     internal static async Task<int> RunAsync(string[] args, CancellationToken ct)
     {
         HostPhase phase = HostPhase.Bootstrap;
-        DotNetToolkit.Logging.ILogService? log = null;
         RingBufferLogStore? ringBuffer = null;
         string? logFilePath = null;
 
+        // Create fallback logger for early bootstrap phase (before Serilog initialization)
+        using var fallbackLogger = new FallbackLogger();
+
         try
         {
+            fallbackLogger.Information("Starting ReportSyncer Console Host");
+
             // Step 1: Load optional appsettings.json
+            fallbackLogger.Information("Loading appsettings.json");
             var appSettings = LoadAppSettings();
 
-            // Step 2: Apply defaults to logging and UI settings
-            var effectiveLogging = HostLoggingDefaults.ApplyLoggingDefaults(appSettings.Logging);
+            // Step 2: Apply defaults to UI settings first (needed for logging defaults)
             var effectiveUi = HostLoggingDefaults.ApplyUiDefaults(appSettings.Ui);
 
-            // Step 3: Initialize Serilog logger
+            // Step 3: Apply defaults to logging settings (depends on UI enabled state)
+            var effectiveLogging = HostLoggingDefaults.ApplyLoggingDefaults(appSettings.Logging, effectiveUi.Enabled!.Value);
+
+            // Step 4: Initialize Serilog logger
+            fallbackLogger.Information("Initializing Serilog logger");
             var loggerSetup = SerilogBootstrapper.Initialize(
                 effectiveLogging, 
                 effectiveUi, 
@@ -59,25 +67,29 @@ internal class Program
             ringBuffer = loggerSetup.RingBufferStore;
             logFilePath = loggerSetup.LogFilePath;
 
-            // Step 4: Parse CLI arguments
+            fallbackLogger.Information("Serilog logger initialized successfully");
+
+            // Step 5: Parse CLI arguments
             var (cliOk, cliOptions, cliError) = CliArgumentParser.TryParse(args);
             if (!cliOk)
             {
                 System.Console.Error.WriteLine(cliError);
                 loggerSetup.Logger.Error("CLI argument parsing failed: {Error}", cliError);
+                fallbackLogger.Error($"CLI argument parsing failed: {cliError}");
                 return (int)ExitCodeMapper.FromUsageError(); // Exit 2: InvalidArguments
             }
 
-            // Step 5: Resolve effective options (CLI > appsettings > defaults)
+            // Step 6: Resolve effective options (CLI > appsettings > defaults)
             var (resolveOk, effectiveOptions, resolveError) = RunOptionsResolver.Resolve(cliOptions!, appSettings);
             if (!resolveOk)
             {
                 System.Console.Error.WriteLine(resolveError);
                 loggerSetup.Logger.Error("Run options resolution failed: {Error}", resolveError);
+                fallbackLogger.Error($"Run options resolution failed: {resolveError}");
                 return (int)ExitCodeMapper.FromUsageError(); // Exit 2: InvalidArguments
             }
 
-            // Step 6: Build RuntimeOverrides from resolved options
+            // Step 7: Build RuntimeOverrides from resolved options
             RuntimeOverrides? overrides = effectiveOptions!.DryRunOverride.HasValue
                 ? new RuntimeOverrides { DryRun = effectiveOptions.DryRunOverride.Value }
                 : null;
@@ -94,10 +106,7 @@ internal class Program
 
             // Build composition root (still in Bootstrap phase)
             var root = new ConsoleCompositionRoot();
-            var host = await root.BuildAsync(configPath, overrides, cts.Token);
-            
-            // Get log service from DI container
-            log = host.Services.GetRequiredService<DotNetToolkit.Logging.ILogService>();
+            var host = await root.BuildAsync(configPath, loggerSetup.Logger, overrides, cts.Token);
 
             loggerSetup.Logger.Information("Loaded configuration from: {ConfigPath}", configPath);
             loggerSetup.Logger.Information("Found {JobCount} job(s)", host.EffectiveConfig.SyncJobs.Count);
@@ -125,17 +134,13 @@ internal class Program
         catch (Exception ex)
         {
             var code = ExitCodeMapper.FromException(ex, phase);
-            var summary = FailureSummaryWriter.BuildSummary(code, ex.Message);
+            
+            // Write to stderr as fallback
+            System.Console.Error.WriteLine($"ERROR: {code} (exit={(int)code})");
+            System.Console.Error.WriteLine(ex.ToString());
 
-            if (log is not null)
-            {
-                FailureSummaryWriter.Write(log, code, summary, ex);
-            }
-            else
-            {
-                // Fallback if log service not yet available
-                System.Console.Error.WriteLine($"ERROR: {summary} (exit={(int)code})");
-            }
+            // Try to log to fallback logger if available
+            fallbackLogger?.Error($"Unhandled exception: {ex.Message}", ex);
 
             return (int)code;
         }
@@ -215,7 +220,7 @@ internal class Program
         }
 
         var areaCSettings = maxLines.HasValue ? new HostUiAreaCSettings(maxLines) : null;
-        var uiSettings = areaCSettings != null ? new HostUiSettings(areaCSettings) : null;
+        var uiSettings = areaCSettings != null ? new HostUiSettings(null, areaCSettings) : null;
 
         // Load logging settings with defaults
         var loggingSection = configuration.GetSection("logging");
@@ -232,7 +237,7 @@ internal class Program
         }
 
         var fileSettings = (!string.IsNullOrEmpty(directory) || !string.IsNullOrEmpty(fileNamePrefix) || retentionCount.HasValue)
-            ? new HostLoggingFileSettings(directory, fileNamePrefix, retentionCount)
+            ? new HostLoggingFileSettings(null, directory, fileNamePrefix, retentionCount)
             : null;
 
         var progressThrottleMsValue = loggingSection["progressThrottleMs"];
@@ -243,7 +248,7 @@ internal class Program
         }
 
         var loggingSettings = (fileSettings != null || progressThrottleMs.HasValue)
-            ? new HostLoggingSettings(fileSettings, progressThrottleMs)
+            ? new HostLoggingSettings(fileSettings, null, null, progressThrottleMs)
             : null;
 
         return new HostAppSettings(runSettings, uiSettings, loggingSettings);

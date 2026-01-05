@@ -6,7 +6,7 @@
 // Description: Implements pre-flight validation orchestration for sync jobs.
 // ============================================================================
 
-using DotNetToolkit.Logging;
+using Microsoft.Extensions.Logging;
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Exceptions;
 using ReportSyncer.Core.Schema.Services;
@@ -18,11 +18,11 @@ namespace ReportSyncer.Core.Sync;
 /// Coordinates schema analysis and translates failures into domain exceptions.
 /// </summary>
 /// <param name="schemaService">The schema analysis service used to inspect source and target schemas.</param>
-/// <param name="log">The logging service used for informational and error messages.</param>
-public sealed class PreFlightValidator(ISchemaService schemaService, ILogService log) : IPreFlightValidator
+/// <param name="logger">The logging service used for informational and error messages.</param>
+public sealed class PreFlightValidator(ISchemaService schemaService, ILogger<PreFlightValidator> logger) : IPreFlightValidator
 {
     private readonly ISchemaService _schemaService = schemaService ?? throw new ArgumentNullException(nameof(schemaService));
-    private readonly ILogService _log = log ?? throw new ArgumentNullException(nameof(log));
+    private readonly ILogger<PreFlightValidator> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
     /// Executes pre-flight validation for the supplied <paramref name="job"/> against the
@@ -50,13 +50,13 @@ public sealed class PreFlightValidator(ISchemaService schemaService, ILogService
         if (analysisResult.IsSuccess)
         {
             var result = new PreFlightResult(job.Name, effectiveConfig.Run.DryRun, analysisResult.Value);
-            _log.LogInformation($"Preflight passed for job {job.Name}.");
+            _logger.LogInformation("Preflight passed for job {JobName}", job.Name);
             return result;
         }
 
         var reason = analysisResult.Error ?? "Schema analysis failed.";
         var message = $"Job='{job.Name}' preflight failed. Reason: {reason}";
-        _log.LogError($"Preflight failed for job {job.Name}: {reason}");
+        _logger.LogError("Preflight failed for job {JobName}: {Reason}", job.Name, reason);
         throw new SchemaMismatchException(message);
     }
 }

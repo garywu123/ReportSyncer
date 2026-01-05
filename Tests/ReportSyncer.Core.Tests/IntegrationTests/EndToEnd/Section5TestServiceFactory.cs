@@ -21,20 +21,20 @@ internal static class Section5TestServiceFactory
         if (fixture is null) throw new ArgumentNullException(nameof(fixture));
         if (fixture.ConnectionString is null) throw new InvalidOperationException("Fixture not initialized.");
 
-        var log = new DummyLogService();
+        var logger = NullLogger.Instance;
         var progress = new InMemoryProgressReporter();
 
         // Configuration pipeline
-        var loader = new YamlConfigurationLoader(log);
+        var loader = new YamlConfigurationLoader(NullLogger<YamlConfigurationLoader>.Instance);
         var validator = new ConfigurationValidator();
-        var configProvider = new ConfigurationProvider(loader, validator, log);
+        var configProvider = new ConfigurationProvider(loader, validator, NullLogger<ConfigurationProvider>.Instance);
 
         // Schema pipeline
         var inspector = new SqlServerSchemaInspector(fixture.CreateInspectorContextFactory());
         var mapper = new SchemaMapper();
         var resolver = new DependencyResolver();
         var schemaService = new SchemaService(inspector, mapper, resolver);
-        var preflight = new PreFlightValidator(schemaService, log);
+        var preflight = new PreFlightValidator(schemaService, NullLogger<PreFlightValidator>.Instance);
 
         // Execution pipeline
         var connectionFactory = fixture.CreateConnectionFactory();

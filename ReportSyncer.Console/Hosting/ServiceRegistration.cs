@@ -7,10 +7,7 @@
 // ============================================================================
 
 using DotNetToolkit.Database.Abstractions;
-using DotNetToolkit.Logging;
-using DotNetToolkit.Logging.Services;
 using Microsoft.Extensions.DependencyInjection;
-using ILogService = DotNetToolkit.Logging.ILogService;
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Observability;
 using ReportSyncer.Core.Schema;
@@ -59,14 +56,6 @@ public static class ServiceRegistration
 
         // Register factory delegates required by Core components
         RegisterDatabaseFactoryDelegates(services);
-
-        // --- Logging ---
-        // Note: Actual Serilog configuration is done by Console Host at startup
-        // Only register if not already registered (allows tests to provide mocks)
-        if (!services.Any(sd => sd.ServiceType == typeof(ILogService)))
-        {
-            services.AddSingleton<ILogService, SerilogLogService>();
-        }
 
         // --- Configuration Layer ---
         services.AddSingleton<IConfigurationLoader, YamlConfigurationLoader>();

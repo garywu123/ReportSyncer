@@ -6,7 +6,7 @@
 // Description: YAML-based implementation of IConfigurationLoader using YamlDotNet.
 // ============================================================================
 
-using DotNetToolkit.Logging;
+using Microsoft.Extensions.Logging;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -54,18 +54,18 @@ public class YamlConfigurationLoader : IConfigurationLoader
            .IgnoreUnmatchedProperties()
            .Build();
 
-    private readonly ILogService _log;
+    private readonly ILogger<YamlConfigurationLoader> _logger;
 
 #pragma warning disable IDE0290
     /// <summary>
     /// Constructs a new instance of <see cref="YamlConfigurationLoader"/>.
     /// </summary>
-    /// <param name="log">Logging service used to record parse errors and unexpected exceptions.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="log"/> is null.</exception>
-    public YamlConfigurationLoader(ILogService log)
+    /// <param name="logger">Logging service used to record parse errors and unexpected exceptions.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="logger"/> is null.</exception>
+    public YamlConfigurationLoader(ILogger<YamlConfigurationLoader> logger)
 #pragma warning restore IDE0290
     {
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
@@ -99,7 +99,7 @@ public class YamlConfigurationLoader : IConfigurationLoader
         }
         catch (Exception ex)
         {
-            await _log.LogErrorAsync("Unexpected error loading configuration", ex, ct);
+            _logger.LogError(ex, "Unexpected error loading configuration");
             throw new ConfigurationException(
                 $"Unexpected error loading configuration: {ex.Message}", ex
             );
@@ -185,7 +185,7 @@ public class YamlConfigurationLoader : IConfigurationLoader
         }
         catch (YamlDotNet.Core.YamlException ye)
         {
-            await _log.LogErrorAsync("YAML parse error loading configuration", ye, ct);
+            _logger.LogError(ye, "YAML parse error loading configuration");
             throw new ConfigurationException($"YAML parse error: {ye.Message}", ye);
         }
     }

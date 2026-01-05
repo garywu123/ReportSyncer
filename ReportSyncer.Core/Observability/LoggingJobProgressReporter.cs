@@ -5,17 +5,17 @@
 // Description: Emits progress events via the logging pipeline.
 // ============================================================================
 
-using DotNetToolkit.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace ReportSyncer.Core.Observability;
 
 public sealed class LoggingJobProgressReporter : IJobProgressReporter
 {
-    private readonly ILogService _log;
+    private readonly ILogger<LoggingJobProgressReporter> _logger;
 
-    public LoggingJobProgressReporter(ILogService log)
+    public LoggingJobProgressReporter(ILogger<LoggingJobProgressReporter> logger)
     {
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public void Report(JobProgressEvent evt)
@@ -26,19 +26,19 @@ public sealed class LoggingJobProgressReporter : IJobProgressReporter
         {
             case ProgressEventKind.Started:
             case ProgressEventKind.Completed:
-                _log.LogInformation(message);
+                _logger.LogInformation("{Message}", message);
                 break;
             case ProgressEventKind.InProgress:
-                _log.LogDebug(message);
+                _logger.LogDebug("{Message}", message);
                 break;
             case ProgressEventKind.Skipped:
-                _log.LogWarning(message);
+                _logger.LogWarning("{Message}", message);
                 break;
             case ProgressEventKind.Failed:
-                _log.LogError($"{message}: {evt.ErrorMessage ?? evt.Message}");
+                _logger.LogError("{Message}: {Error}", message, evt.ErrorMessage ?? evt.Message);
                 break;
             default:
-                _log.LogWarning($"Unknown ProgressEventKind: {evt.Kind}");
+                _logger.LogWarning("Unknown ProgressEventKind: {Kind}", evt.Kind);
                 break;
         }
     }
@@ -51,19 +51,19 @@ public sealed class LoggingJobProgressReporter : IJobProgressReporter
         {
             case ProgressEventKind.Started:
             case ProgressEventKind.Completed:
-                _log.LogInformation(message);
+                _logger.LogInformation("{Message}", message);
                 break;
             case ProgressEventKind.InProgress:
-                _log.LogDebug($"{message} - Progress: {evt.Metrics?.RowsProcessed ?? 0}/{evt.Metrics?.TotalRowsPlanned ?? 0}");
+                _logger.LogDebug("{Message} - Progress: {Processed}/{Total}", message, evt.Metrics?.RowsProcessed ?? 0, evt.Metrics?.TotalRowsPlanned ?? 0);
                 break;
             case ProgressEventKind.Skipped:
-                _log.LogWarning(message);
+                _logger.LogWarning("{Message}", message);
                 break;
             case ProgressEventKind.Failed:
-                _log.LogError($"{message}: {evt.ErrorMessage ?? evt.Message}");
+                _logger.LogError("{Message}: {Error}", message, evt.ErrorMessage ?? evt.Message);
                 break;
             default:
-                _log.LogWarning($"Unknown ProgressEventKind: {evt.Kind}");
+                _logger.LogWarning("Unknown ProgressEventKind: {Kind}", evt.Kind);
                 break;
         }
     }

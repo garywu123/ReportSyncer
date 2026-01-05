@@ -6,7 +6,7 @@
 // Description: UI state store that maintains table set invariant from ExecutionPlan.
 // ============================================================================
 
-using DotNetToolkit.Logging;
+using Microsoft.Extensions.Logging;
 using ReportSyncer.Core.Observability;
 using ReportSyncer.Core.Sync.Contracts;
 
@@ -24,7 +24,7 @@ public sealed class UiStateStore
 {
     private readonly Dictionary<string, int> _tableNameToIndex;
     private readonly List<TableRowState> _rows;
-    private readonly ILogService _log;
+    private readonly ILogger<UiStateStore> _logger;
     private readonly object _lock = new();
 
     /// <summary>
@@ -45,13 +45,13 @@ public sealed class UiStateStore
     /// Initializes a new instance of <see cref="UiStateStore"/>.
     /// </summary>
     /// <param name="executionPlanTables">Tables from ExecutionPlan (schema.table format).</param>
-    /// <param name="log">Log service for warnings.</param>
-    public UiStateStore(IReadOnlyList<string> executionPlanTables, ILogService log)
+    /// <param name="logger">Logger for warnings.</param>
+    public UiStateStore(IReadOnlyList<string> executionPlanTables, ILogger<UiStateStore> logger)
     {
         if (executionPlanTables is null)
             throw new ArgumentNullException(nameof(executionPlanTables));
 
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _tableNameToIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         _rows = new List<TableRowState>(executionPlanTables.Count);
@@ -130,7 +130,7 @@ public sealed class UiStateStore
     {
         if (evt.Payload is not TableProgressEvent tableEvt)
         {
-            _log.LogWarning("UiStateStore received Table event with invalid payload type");
+            _logger.LogWarning("UiStateStore received Table event with invalid payload type");
             return;
         }
 
@@ -140,7 +140,7 @@ public sealed class UiStateStore
         {
             if (!_tableNameToIndex.TryGetValue(tableName, out int index))
             {
-                _log.LogWarning($"Received event for unknown table: {tableName}. Table not in ExecutionPlan.");
+                _logger.LogWarning("Received event for unknown table: {TableName}. Table not in ExecutionPlan", tableName);
                 return;
             }
 

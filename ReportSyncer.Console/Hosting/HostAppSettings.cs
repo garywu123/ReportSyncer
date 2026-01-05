@@ -42,8 +42,9 @@ public sealed record HostRunSettings(string? JobConfigPath, bool? DryRun);
 /// <summary>
 /// Host-level UI settings from appsettings.json.
 /// </summary>
+/// <param name="Enabled">Whether UI mode is enabled. Default: true.</param>
 /// <param name="AreaC">Optional Area C settings.</param>
-public sealed record HostUiSettings(HostUiAreaCSettings? AreaC);
+public sealed record HostUiSettings(bool? Enabled, HostUiAreaCSettings? AreaC);
 
 /// <summary>
 /// Area C UI settings (recent log lines display).
@@ -55,18 +56,44 @@ public sealed record HostUiAreaCSettings(int? MaxLines);
 /// Host-level logging settings from appsettings.json.
 /// </summary>
 /// <param name="File">Optional file logging settings.</param>
+/// <param name="Ring">Optional ring buffer logging settings.</param>
+/// <param name="Console">Optional console logging settings.</param>
 /// <param name="ProgressThrottleMs">Minimum milliseconds between progress log writes. Must be positive. Default: 5000.</param>
 public sealed record HostLoggingSettings(
-    HostLoggingFileSettings? File, 
+    HostLoggingFileSettings? File,
+    HostLoggingRingSettings? Ring,
+    HostLoggingConsoleSettings? Console,
     int? ProgressThrottleMs);
 
 /// <summary>
 /// File logging settings.
 /// </summary>
+/// <param name="Enabled">Whether file logging is enabled. Default: true.</param>
 /// <param name="Directory">Directory for log files. Default: "logs".</param>
 /// <param name="FileNamePrefix">Prefix for log file names. Default: "reportsyncer".</param>
 /// <param name="RetentionCount">Number of log files to retain. Must be positive. Default: 20.</param>
 public sealed record HostLoggingFileSettings(
+    bool? Enabled,
     string? Directory, 
     string? FileNamePrefix, 
     int? RetentionCount);
+
+/// <summary>
+/// Ring buffer logging settings (for UI Area C).
+/// </summary>
+/// <param name="Enabled">Whether ring buffer logging is enabled. Default: true.</param>
+/// <param name="Capacity">Maximum number of log lines to keep in ring buffer. Must be positive. Default: 2000.</param>
+/// <param name="MinLevel">Minimum log level for ring buffer. Default: "Information".</param>
+public sealed record HostLoggingRingSettings(
+    bool? Enabled,
+    int? Capacity,
+    string? MinLevel);
+
+/// <summary>
+/// Console logging settings.
+/// </summary>
+/// <param name="Enabled">Whether console logging is enabled. Default: true (disabled when UI is enabled).</param>
+/// <param name="MinLevel">Minimum log level for console. Default: "Information".</param>
+public sealed record HostLoggingConsoleSettings(
+    bool? Enabled,
+    string? MinLevel);

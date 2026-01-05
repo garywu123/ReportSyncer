@@ -39,24 +39,55 @@ public static class HostLoggingDefaults
     public const int UiAreaCMaxLines = 200;
 
     /// <summary>
+    /// Default ring buffer capacity.
+    /// </summary>
+    public const int RingBufferCapacity = 2000;
+
+    /// <summary>
+    /// Default minimum log level for ring buffer.
+    /// </summary>
+    public const string RingBufferMinLevel = "Information";
+
+    /// <summary>
+    /// Default minimum log level for console.
+    /// </summary>
+    public const string ConsoleMinLevel = "Information";
+
+    /// <summary>
     /// Applies defaults to HostLoggingSettings.
     /// </summary>
     /// <param name="settings">The settings to apply defaults to (can be null).</param>
+    /// <param name="uiEnabled">Whether UI mode is enabled (affects console sink default).</param>
     /// <returns>A non-null HostLoggingSettings with defaults applied.</returns>
-    public static HostLoggingSettings ApplyLoggingDefaults(HostLoggingSettings? settings)
+    public static HostLoggingSettings ApplyLoggingDefaults(HostLoggingSettings? settings, bool uiEnabled)
     {
         var file = settings?.File;
         var effectiveFile = new HostLoggingFileSettings(
+            Enabled: file?.Enabled ?? true,
             Directory: file?.Directory ?? LogDirectory,
             FileNamePrefix: file?.FileNamePrefix ?? LogFileNamePrefix,
             RetentionCount: file?.RetentionCount is > 0 ? file.RetentionCount : LogRetentionCount
+        );
+
+        var ring = settings?.Ring;
+        var effectiveRing = new HostLoggingRingSettings(
+            Enabled: ring?.Enabled ?? true,
+            Capacity: ring?.Capacity is > 0 ? ring.Capacity : RingBufferCapacity,
+            MinLevel: ring?.MinLevel ?? RingBufferMinLevel
+        );
+
+        var console = settings?.Console;
+        // Console defaults to disabled when UI is enabled
+        var effectiveConsole = new HostLoggingConsoleSettings(
+            Enabled: console?.Enabled ?? !uiEnabled,
+            MinLevel: console?.MinLevel ?? ConsoleMinLevel
         );
 
         var effectiveProgressThrottleMs = settings?.ProgressThrottleMs is > 0 
             ? settings.ProgressThrottleMs.Value 
             : ProgressThrottleMs;
 
-        return new HostLoggingSettings(effectiveFile, effectiveProgressThrottleMs);
+        return new HostLoggingSettings(effectiveFile, effectiveRing, effectiveConsole, effectiveProgressThrottleMs);
     }
 
     /// <summary>
@@ -70,6 +101,8 @@ public static class HostLoggingDefaults
             ? settings.AreaC.MaxLines.Value 
             : UiAreaCMaxLines;
 
-        return new HostUiSettings(new HostUiAreaCSettings(maxLines));
+        var enabled = settings?.Enabled ?? true;
+
+        return new HostUiSettings(enabled, new HostUiAreaCSettings(maxLines));
     }
 }

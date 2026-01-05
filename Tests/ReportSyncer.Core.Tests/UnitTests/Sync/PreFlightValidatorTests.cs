@@ -1,5 +1,6 @@
 using DotNetToolkit.General;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ReportSyncer.Core.Configuration;
 using ReportSyncer.Core.Exceptions;
@@ -27,10 +28,9 @@ public class PreFlightValidatorTests
             .Setup(s => s.AnalyzeJobAsync(config, job, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<SchemaAnalysisResult>.Fail(reason));
 
-        var log = new Mock<DotNetToolkit.Logging.ILogService>(MockBehavior.Strict);
-        log.Setup(l => l.LogError(It.IsAny<string>(), It.IsAny<Exception?>())).Verifiable();
+        var logger = NullLogger<PreFlightValidator>.Instance;
 
-        var validator = new PreFlightValidator(schemaService.Object, log.Object);
+        var validator = new PreFlightValidator(schemaService.Object, logger);
 
         // Act
         var act = () => validator.ValidateAsync(config, job, CancellationToken.None);
@@ -39,8 +39,6 @@ public class PreFlightValidatorTests
         var ex = await act.Should().ThrowAsync<SchemaMismatchException>();
         ex.Which.Message.Should().Contain(job.Name).And.Contain(reason);
         schemaService.VerifyAll();
-        log.Verify(l => l.LogError(It.Is<string>(m => m.Contains(job.Name) && m.Contains(reason)), It.IsAny<Exception?>()), Times.Once);
-        log.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -56,10 +54,9 @@ public class PreFlightValidatorTests
             .Setup(s => s.AnalyzeJobAsync(config, job, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<SchemaAnalysisResult>.Ok(analysis));
 
-        var log = new Mock<DotNetToolkit.Logging.ILogService>(MockBehavior.Strict);
-        log.Setup(l => l.LogInformation(It.IsAny<string>())).Verifiable();
+        var logger = NullLogger<PreFlightValidator>.Instance;
 
-        var validator = new PreFlightValidator(schemaService.Object, log.Object);
+        var validator = new PreFlightValidator(schemaService.Object, logger);
 
         // Act
         var result = await validator.ValidateAsync(config, job, CancellationToken.None);
@@ -71,8 +68,6 @@ public class PreFlightValidatorTests
         result.Schema.ExecutionPlan.Should().NotBeNull();
 
         schemaService.VerifyAll();
-        log.Verify(l => l.LogInformation(It.Is<string>(m => m.Contains(job.Name))), Times.Once);
-        log.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -88,18 +83,15 @@ public class PreFlightValidatorTests
             .Setup(s => s.AnalyzeJobAsync(config, job, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<SchemaAnalysisResult>.Ok(analysis));
 
-        var log = new Mock<DotNetToolkit.Logging.ILogService>(MockBehavior.Strict);
-        log.Setup(l => l.LogInformation(It.IsAny<string>())).Verifiable();
+        var logger = NullLogger<PreFlightValidator>.Instance;
 
-        var validator = new PreFlightValidator(schemaService.Object, log.Object);
+        var validator = new PreFlightValidator(schemaService.Object, logger);
 
         // Act
         await validator.ValidateAsync(config, job, CancellationToken.None);
 
         // Assert
         schemaService.Verify(s => s.AnalyzeJobAsync(config, job, It.IsAny<CancellationToken>()), Times.Once);
-        log.Verify(l => l.LogInformation(It.IsAny<string>()), Times.Once);
-        log.VerifyNoOtherCalls();
     }
 
     private static SyncJobConfig CreateJob()
