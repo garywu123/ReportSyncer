@@ -40,6 +40,7 @@ public static class SerilogBootstrapper
     /// <param name="loggingSettings">Logging configuration settings.</param>
     /// <param name="uiSettings">UI configuration settings.</param>
     /// <param name="now">Current timestamp for log file naming.</param>
+    /// <param name="fallbackLogger">Optional fallback logger for recording initialization steps and errors.</param>
     /// <returns>A <see cref="LoggerSetup"/> containing the logger, log file path, and ring buffer store.</returns>
     /// <remarks>
     /// <para>
@@ -53,14 +54,21 @@ public static class SerilogBootstrapper
     /// File sink provides the complete audit trail.
     /// Console sink should be disabled during UI mode to avoid polluting TUI output.
     /// </para>
+    /// <para>
+    /// If provided, fallbackLogger will record all initialization steps and any errors.
+    /// This ensures diagnostics are available even if Serilog initialization fails.
+    /// </para>
     /// </remarks>
     public static LoggerSetup Initialize(
         HostLoggingSettings loggingSettings,
         HostUiSettings uiSettings,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        FallbackLogger? fallbackLogger = null)
     {
         ArgumentNullException.ThrowIfNull(loggingSettings);
         ArgumentNullException.ThrowIfNull(uiSettings);
+
+        fallbackLogger?.Information("Starting Serilog initialization");
 
         // Step 1: Create logger configuration
         var loggerConfig = new LoggerConfiguration()
@@ -75,6 +83,8 @@ public static class SerilogBootstrapper
         RingBufferLogStore? ringBufferStore = null;
         if (loggingSettings.Ring!.Enabled!.Value)
         {
+            fallbackLogger?.Information($"Configuring ring buffer sink (capacity: {loggingSettings.Ring.Capacity})");
+            
             var capacity = loggingSettings.Ring.Capacity!.Value;
             var minLevel = ParseLogLevel(loggingSettings.Ring.MinLevel!);
             
@@ -96,18 +106,26 @@ public static class SerilogBootstrapper
             var prefix = loggingSettings.File.FileNamePrefix!;
             var retentionCount = loggingSettings.File.RetentionCount!.Value;
 
+            fallbackLogger?.Information($"Configuring file sink (directory: {directory}, prefix: {prefix})");
+
             // Best-effort log retention cleanup
             var (cleanupSuccess, deletedCount, cleanupError) = LogRetentionCleaner.BestEffortCleanup(
                 directory, prefix, retentionCount);
 
             if (!cleanupSuccess)
             {
-                // Log to stderr as logger not yet initialized
+                // Log to both stderr and fallback logger
                 System.Console.Error.WriteLine($"Warning: Log retention cleanup failed: {cleanupError}");
+                fallbackLogger?.Error($"Log retention cleanup failed: {cleanupError}");
+            }
+            else if (deletedCount > 0)
+            {
+                fallbackLogger?.Information($"Cleaned up {deletedCount} old log file(s)");
             }
 
             // Generate log file path
             logFilePath = LogFilePathProvider.BuildJsonlPath(directory, prefix, now);
+            fallbackLogger?.Information($"Log file path: {logFilePath}");
 
             // Ensure directory exists
             var logDirectory = Path.GetDirectoryName(logFilePath);
@@ -129,6 +147,8 @@ public static class SerilogBootstrapper
         // Step 4: Console sink (optional, default off when UI enabled)
         if (loggingSettings.Console!.Enabled!.Value)
         {
+            fallbackLogger?.Information("Configuring console sink");
+            
             var minLevel = ParseLogLevel(loggingSettings.Console.MinLevel!);
             loggerConfig = loggerConfig.WriteTo.Console(
                 outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
@@ -136,8 +156,12 @@ public static class SerilogBootstrapper
         }
 
         // Step 5: Create the logger and set it as the global logger
+        fallbackLogger?.Information("Creating Serilog logger instance");
+        
         var logger = loggerConfig.CreateLogger();
         Log.Logger = logger;
+
+        fallbackLogger?.Information("Serilog logger created successfully");
 
         // Log initialization info
         logger.Information("Serilog pipeline initialized");

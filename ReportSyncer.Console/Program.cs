@@ -62,7 +62,8 @@ internal class Program
             var loggerSetup = SerilogBootstrapper.Initialize(
                 effectiveLogging, 
                 effectiveUi, 
-                DateTimeOffset.Now);
+                DateTimeOffset.Now,
+                fallbackLogger);
             
             ringBuffer = loggerSetup.RingBufferStore;
             logFilePath = loggerSetup.LogFilePath;

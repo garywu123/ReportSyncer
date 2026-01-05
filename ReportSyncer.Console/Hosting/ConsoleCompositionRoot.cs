@@ -59,7 +59,7 @@ public sealed class ConsoleCompositionRoot
         using var fallbackLogger = new FallbackLogger();
         fallbackLogger.Information("Starting configuration loading (bootstrap phase)");
 
-        var bootstrapProvider = BuildBootstrapProvider();
+        var bootstrapProvider = BuildBootstrapProvider(fallbackLogger);
 
         // Load effective configuration using bootstrap provider
         var configProvider = bootstrapProvider.GetRequiredService<IConfigurationProvider>();
@@ -76,18 +76,26 @@ public sealed class ConsoleCompositionRoot
     /// <summary>
     /// Phase 1: Builds a minimal service provider for configuration loading.
     /// </summary>
-    /// <param name="fallbackLogger">Simple logger for bootstrap phase diagnostics (not injected, used directly in BuildAsync).</param>
+    /// <param name="fallbackLogger">Simple logger for bootstrap phase diagnostics.</param>
     /// <remarks>
-    /// Bootstrap provider includes only configuration loading and validation services.
-    /// No logging provider is registered here because:
-    /// - FallbackLogger is used directly in BuildAsync for bootstrap diagnostics
-    /// - ConfigurationLoader/ConfigurationProvider do not require ILogger dependencies
+    /// Bootstrap provider includes:
+    /// - FallbackLoggerProvider (bridges MEL ILogger to FallbackLogger)
+    /// - Configuration loading and validation services
     /// 
-    /// This provider is used to load the effective configuration before building the final provider.
+    /// This allows ConfigurationProvider and YamlConfigurationLoader (which depend on ILogger)
+    /// to log through FallbackLogger during the bootstrap phase.
     /// </remarks>
-    private ServiceProvider BuildBootstrapProvider()
+    private ServiceProvider BuildBootstrapProvider(FallbackLogger fallbackLogger)
     {
         var services = new ServiceCollection();
+
+        // Register FallbackLogger as the logging provider for bootstrap phase
+        services.AddLogging(builder =>
+        {
+            builder.ClearProviders();
+            builder.SetMinimumLevel(LogLevel.Information);
+            builder.AddProvider(new FallbackLoggerProvider(fallbackLogger));
+        });
 
         // Register configuration loading services
         services.AddSingleton<IConfigurationLoader, YamlConfigurationLoader>();
