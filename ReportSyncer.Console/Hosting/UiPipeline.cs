@@ -9,7 +9,7 @@
 using DotNetToolkit.Logging;
 using ReportSyncer.Console.Logging;
 using ReportSyncer.Console.UI;
-using ReportSyncer.Core.Preflight;
+using ReportSyncer.Core.Sync.Contracts;
 
 namespace ReportSyncer.Console.Hosting;
 

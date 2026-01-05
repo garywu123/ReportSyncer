@@ -71,36 +71,29 @@ Stabilize `DotNetToolkit.General` as a small, boring but solid general-utilities
 
 ---
 
-### Task 1.2 – DotNetToolkit.Logging: ILogService + Serilog Adapter
+### Task 1.2 – Logging: Migrate to MEL `ILogger<T>` and host Serilog bootstrap
 
 **Goal**  
-Provide a clean logging abstraction (`ILogService`) plus a Serilog-backed implementation, suitable for any app, including ReportSyncer.
+Adopt `Microsoft.Extensions.Logging.ILogger<T>` as the canonical logging API for all production code. Hosts are responsible for creating the Serilog pipeline and registering it as the MEL provider (e.g. via `AddSerilog`). Remove the `ILogService` indirection from new code and plan migration for existing uses.
 
 **Inputs**
 
-- `DotNetToolkit.Logging/ILogService.cs` and project file.
-- Backend docs for logging requirements:
-    - Core depends on `DotNetToolkit.Logging.ILogService`, hosts wire Serilog.
-        
+- Host-level Serilog bootstrapper design (RingBuffer/File/Console sinks).
+- Documentation and migration playbook (see docs/ImplementationSteps/AdditionalUpdates/20.修复 Logging.md).
 
 **What must be implemented**
-- Implement `SerilogLogService` (name can vary slightly) that:
-    - Wraps a Serilog `ILogger` instance.
-    - Implements all `ILogService` sync/async methods:
-        - `LogVerbose`, `LogDebug`, `LogInformation`, `LogWarning`, `LogError`, `LogCritical` (+ async equivalents).
-- Add DI registration helper:
-    - E.g. `LoggingServiceCollectionExtensions.AddSerilogLogService(this IServiceCollection services, ILogger serilogLogger)`.
-- Ensure logging abstraction remains generic (no domain terms).
-    
+- Implement a host-side `SerilogBootstrapper` that creates a single Serilog pipeline based on `IConfiguration` and registers it with MEL (`Log.Logger` + `AddSerilog(Log.Logger, dispose:false)`).
+- Ensure the Serilog pipeline includes a safe RingBuffer sink, an async File sink (JSONL), and an optional Console sink controlled by UI mode.
+- Provide DI registration helpers in toolkit hosts for wiring Serilog into `IServiceCollection` (e.g., `AddSerilogAsLoggingProvider(this IServiceCollection, IConfiguration)`).
+- Create a migration plan for replacing `DotNetToolkit.Logging.ILogService` usages with `ILogger<T>` across projects and tests (mechanical replace patterns, mock/test logger helpers).
 
 **Constraints & freedom**
-- `DotNetToolkit.Logging` may reference Serilog packages (as allowed infra), but cannot reference ReportSyncer types.
-- Do not bake any file paths, config keys or environment logic inside the library; hosts decide.
-    
+- Core must not reference Serilog types; it may depend on `Microsoft.Extensions.Logging` and should use `ILogger<T>`.
+- Avoid introducing a custom logging abstraction in Core. Do not add a new cross-cutting `ILogService` abstraction.
+
 **Expected behavior / tests**
-- Unit tests with a fake Serilog logger:
-    - Verify each `ILogService` method calls the correct Serilog level.
-- Confirm ReportSyncer can depend **only** on `ILogService` without knowing Serilog exists.
+- Unit tests for the `SerilogBootstrapper` that validate pipeline composition given different configurations.
+- Migration tests: small integration test that boots a host, writes an `ILogger<T>` message, and verifies the message arrives in the RingBuffer snapshot.
     
 
 ---
@@ -217,7 +210,7 @@ Provide clean DI hooks so any host (ReportSyncer.Console, ReportSyncer.WebApi, o
             
 - Optionally add parallel DI helpers for Logging:
     
-    - `AddLoggingServices` to wire `ILogService` to Serilog adapter.
+    - `AddLoggingServices` / `AddSerilogAsLoggingProvider` helpers to register Serilog as the `Microsoft.Extensions.Logging` provider and to configure host-level sinks.
         
 
 **Constraints & freedom**

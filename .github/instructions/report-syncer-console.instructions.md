@@ -24,9 +24,9 @@ Do NOT implement business rules here.
 - Progress callbacks/reporters must **enqueue** events only (Channel/ConcurrentQueue). No rendering, no blocking I/O, no exceptions.
 
 ## Logging rules
-- All logs go through `DotNetToolkit.Logging.ILogService`.
-- Console Host may configure Serilog sinks, but Core must not reference Serilog directly.
-- File logging should be JSONL. Keep log messages structured (message templates + properties).
+- All production code should use `Microsoft.Extensions.Logging.ILogger<T>` for logging. Do not inject or depend on `DotNetToolkit.Logging`.
+- Console Host is responsible for creating the Serilog pipeline and registering it as the MEL provider (e.g. `AddSerilog(Log.Logger)`). Hosts may configure sinks (RingBuffer/File/Console) and formatters.
+- File logging should be JSONL. Keep log messages structured (message templates + properties). Core must not reference Serilog types.
 
 ## CLI + config rules
 - CLI stays minimal: `--config <path>`, `--dry-run [true|false]`.

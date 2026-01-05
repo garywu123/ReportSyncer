@@ -3,10 +3,10 @@ description: Rules for code inside ReportSyncer.Core (domain layer)
 applyTo: "src/ReportSyncer.Core/**"
 ---
 
-- Treat ReportSyncer.Core as the domain layer:
+ - Treat ReportSyncer.Core as the domain layer:
   - No direct references to ReportSyncer.Console or ReportSyncer.WebApi.
   - No references to UI, HTTP, CLI, or environment-specific APIs.
-  - No Serilog, no DryIoc, no Dapper, no JSON libraries. Use only DotNetToolkit.* and domain abstractions.
+  - No Serilog or host-specific logging implementations. Core may depend on `Microsoft.Extensions.Logging` and must use `ILogger<T>` for logging. Do not reference `DotNetToolkit.Logging`.
 
 - Responsibilities that belong here:
   - Configuration models, YAML loading and validation.

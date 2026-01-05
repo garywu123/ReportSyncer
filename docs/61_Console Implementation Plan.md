@@ -24,14 +24,13 @@
 #### 8.0.1 Console 项目引用（最小集合）
 
 - `ReportSyncer.Core`
-- `DotNetToolkit.Logging`
 - `DotNetToolkit.Database`
 - Host 侧使用：
   - `Microsoft.Extensions.DependencyInjection`
   - `Microsoft.Extensions.Logging`
   - Serilog 相关包（Console/File + 自定义 in-memory sink）
 
-> 代码核实：`ReportSyncer.Console/ReportSyncer.Console.csproj` 已包含对 `ReportSyncer.Core`、`DotNetToolkit.Logging`、`DotNetToolkit.Database` 的 ProjectReference。
+> 代码核实：`ReportSyncer.Console/ReportSyncer.Console.csproj` 应至少包含对 `ReportSyncer.Core`、`DotNetToolkit.Database` 的 ProjectReference。`DotNetToolkit.Logging`（若存在）应视为已弃用；Host 应优先使用 `Microsoft.Extensions.Logging` + Serilog provider。
 
 #### 8.0.2 Core 服务注册清单（按当前代码库）
 
@@ -66,8 +65,8 @@ job-scope 对象（每次 run 一个 job 时创建；用于绑定该 job 的 sou
 
 必须注册（建议 `Singleton`，Host 提供实现）：
 
-- `DotNetToolkit.Logging.ILogService`：
-  - Host 使用 Serilog 初始化后，注入 `SerilogLogService`（或等价适配器）。
+- Logging / Observability:
+  - Register MEL logging via `services.AddLogging()` and bridge Serilog using `AddSerilog(Log.Logger, dispose:false)` after building the Serilog pipeline in the host bootstrap. Hosts should not require `DotNetToolkit.Logging`; prefer `ILogger<T>` in Core.
 
 #### 8.0.3 连接解析与 DB 工厂（MVP 规则，禁止硬编码）
 
@@ -256,6 +255,166 @@ MVP 规则（实现者必须照做）：
 - 过滤后页数变化：给定 N 张表与 pageSize，应用 filter 后，页数/可见表数量符合预期。
 - 失败置顶：在混合状态集合中，`Failed` 表始终排在最前（不受其它排序影响）。
 - 排序稳定性：同一状态组内按 TableName 字母序排序；必要时以 `InsertOrder` 保持稳定。
+
+---
+
+## Task 8.5 — UI Wiring：把 UI 接入主执行链路（必须）
+### 范围
+- Program.cs / Host 构建与 DI 注册
+- IJobProgressReporter 的绑定与注入
+- UI 生命周期（Start/Stop）与 CancellationToken 管理
+
+### 要求
+1. **DI 确认**
+   - 确保 `IJobProgressReporter` 实际解析到 `ConsoleJobProgressReporter`（而不是 Null 兜底）
+   - 若未开启 UI（例如 non-interactive 或配置禁用），明确使用 Null reporter，并输出一次英文提示（可选）
+
+2. **生命周期**
+   - 在执行开始前启动 UI loop（UiPipeline.Start）
+   - 执行结束后停止 UI loop（UiPipeline.Stop）
+   - 无论成功/失败/取消，Stop 都必须执行（try/finally）
+
+3. **ExecutionPlan 获取**
+   - UiStateStore 需要的表集合必须来自 execution plan（或 preflight 结果）
+   - 若现有架构无法从 Program 拿到 plan：提供“最小侵入”的桥接方式（例如 host 返回 plan 或通过一个共享上下文对象传递）
+   - 不允许为了 UI 把 Core 大改（除非在 Non-goal 外明确）
+
+### 验收标准
+- 运行一个最小 job：UI 能开始刷新、表状态随事件变化
+- Ctrl+C 或异常退出：UI 能干净停止，不残留半屏输出
+- 退出码仍由现有 8.2 机制决定（本任务不改退出码）
+
+### 测试建议
+- Unit: `UiPipelineLifecycleTests`（使用 fake clock / cancellation）
+- Unit: `ServiceRegistration_ResolvesConsoleJobProgressReporterTests`（确保 DI wiring）
+- Integration（可选）：跑一个极小任务，断言输出包含 UI header（不强制稳定快照，避免脆弱测试）
+
+---
+
+### Task 8.5.1 — UI 配置接入与去硬编码（必须）
+#### 范围
+- 新增/完善 `UiOptions`（或等价配置对象）
+- 从 appsettings / env 读取并 clamp（与 Spec 对齐）
+
+#### 要求（与 Spec 对齐）
+- `ui.refreshIntervalMs`：默认 250ms，最小 100ms（小于 100 取 100）
+- `ui.areaB.pageSize`：默认 20，<=0 归一化为 20
+- `ui.areaC.maxLines`：默认 10（或按 Spec），<=0 归一化为默认
+- `ui.nonInteractive`：默认 false（或按你当前设计），为 true 时禁用键盘读取
+
+#### 验收标准
+- 配置改变能实际影响 UI 刷新频率/分页大小/AreaC 行数
+- 所有 clamp 行为有单测
+
+#### 测试建议
+- Unit: `UiOptionsClampTests`
+- Unit: `ConsoleUiLoop_RefreshIntervalClampTests`（若可注入 clock 更好）
+
+---
+
+### Task 8.5.2 — Area B 排序规则补齐（必须）
+#### 目标
+把 Area B 的排序从“部分实现”补到 Spec 的确定性排序，避免非交互/分页时输出乱跳。
+
+#### 排序规则（硬规则）
+1. Failed 置顶
+2. 状态分组顺序（示例）：Running -> Pending -> Completed（若 Spec 有定义，以 Spec 为准）
+3. 同状态内：`TableName` 字母序
+4. 最后：`InsertOrder` 作为稳定排序 tie-breaker（或 Spec 要求的字段）
+
+> 注意：如果你当前实现是 `ThenBy(InsertOrder)`，需要补 `TableName`，并明确状态组顺序。
+
+#### 验收标准
+- 给定同一组表状态，输出顺序稳定、可预测
+- 非交互模式下排序与交互模式一致
+
+#### 测试建议
+- Unit: `AreaBSortRulesTests`（覆盖：失败置顶、同状态按 TableName、InsertOrder 稳定性）
+
+---
+
+### Task 8.5.3 — Area B 过滤模式降级
+
+### 选项 B：明确降级（如果你坚持不做过滤）
+- 更新 Spec 文档 60/61：将 a/f/r 标为 deferred / non-goal
+- Area D 不显示这些按键，避免误导
+
+### 验收标准
+- 无论选 A 还是 B，都必须让 **文档与实现一致**（否则后面 8.7 你会继续踩雷）
+
+### 测试建议
+- Doc: 更新 60/61 的对应章节（若选择 B 或 A 都建议更新）
+
+---
+
+## Task 8.5.4 — Console 输出污染治理（建议，但强烈推荐）
+### 问题
+UI loop 在清屏/重绘时，Serilog Console sink 会把日志插进 UI 中间，导致输出不可读。
+
+### 解决策略（任选其一）
+1. UI 运行期间禁用 Console sink，只写 file（推荐）
+
+### 验收标准
+- UI 渲染期间屏幕不出现“随机夹杂日志行”
+- 失败时仍能在文件中完整看到日志
+
+### 测试建议
+- Unit: logger pipeline 选择逻辑（按配置/模式切换）
+
+---
+
+## Task 8.6 — ProgressLogThrottler 形成可观察行为（建议，取决于你是否要保留它）
+### 目标
+让 `ProgressLogThrottler` 不再是“存在但没用”的摆设。
+
+### 要求（两条路二选一）
+- 路线 A：接入
+  - 高频 progress event 写文件日志时做节流
+  - 关键状态变更（Start/Completed/Failed）永远不节流
+- 路线 B：移除或标记为 deferred
+  - 删除 unused 代码或在文档中声明未启用
+  - 避免“看起来有功能，实际上没有”的技术债
+
+### 验收标准
+- A：在高频事件下，日志速率下降且不丢关键状态
+- B：代码库不再包含无引用的 throttler（或有明确注释与文档说明）
+
+### 测试建议
+- Unit: `ProgressLogThrottlerTests`（节流窗口、关键事件不过滤）
+- Integration（可选）：模拟 1000 条 progress，断言输出行数在阈值内
+
+---
+
+## Task 8.6.1 — 文档对齐（必须）
+### 目标
+把 60/61 与实现对齐，避免后续维护出现“文档硬规则 vs 代码行为”的分裂。
+
+### 要求
+- 明确列出已实现/未实现项（特别是 filter、refreshInterval、AreaC 行数、nonInteractive 行为）
+- 如果 FilterText 不做：必须在 60/61 中写为 deferred，并移除“必须实现”的措辞
+
+### 验收标准
+- 60/61 中 UI 行为描述与当前代码一致
+- Task 8.7 依赖的行为（end-of-run summary）不会被文档冲突影响
+
+---
+
+## Non-goals（明确不做）
+- 不在本阶段重构 Core orchestrator 的内部职责划分
+- 不引入复杂的 TUI 框架（例如 Spectre.Console），保持现有轻量实现
+- 不实现“文本搜索 FilterText”（除非你选择把它纳入本阶段，并同步文档与测试）
+
+---
+
+## Done Definition（完成定义）
+当且仅当：
+- UI 真正接入 Program 主流程（Start/Stop + Reporter 注入 + plan 初始化）
+- 所有硬编码配置项变为可配置且 clamp 有测试
+- Area B 排序规则按 Spec 可预测
+- filter 行为在代码与文档一致（实现或降级）
+- Console 输出不再被日志污染（或有明确策略）
+- 文档 60/61 对齐完成
+才允许进入 Task 8.7。
 
 ---
 

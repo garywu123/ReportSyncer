@@ -25,13 +25,13 @@ Follow strict layering. Keep hosts thin. Keep domain logic in Core.
 - `.github/instructions/report-syncer-console-tests.instructions.md`: rules for `ReportSyncer.Console.Tests`
 - `.github/instructions/dotnetoolkit.instructions.md`: rules for `DotNetToolkit.*`
 
-## C# Generation Guidelines
+# C# Generation Guidelines
 - Target `net10.0`, modern C# features, nullable reference types enabled.
 - DI: use `Microsoft.Extensions.DependencyInjection`.
 - Database: use `DotNetToolkit.Database` abstractions; do not use EF.
 - Logging:
-  - In Core: log via `DotNetToolkit.Logging.ILogService` only.
-  - Hosts may wire Serilog sinks, but Core must not reference Serilog.
+  - In Core: use `Microsoft.Extensions.Logging.ILogger<T>` only. Do not reference Serilog or `DotNetToolkit.Logging` from Core.
+  - Hosts: configure Serilog as the `Microsoft.Extensions.Logging` provider (e.g. `AddSerilog`) and create the Serilog pipeline in the host bootstrap.
 
 ## Layering Rules (Hard)
 - `ReportSyncer.Core` may depend on `DotNetToolkit.*` but must never depend on hosts.
