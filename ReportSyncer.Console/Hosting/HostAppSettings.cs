@@ -14,6 +14,7 @@ namespace ReportSyncer.Console.Hosting;
 /// <param name="Run">Optional run-level settings.</param>
 /// <param name="Ui">Optional UI settings.</param>
 /// <param name="Logging">Optional logging settings.</param>
+/// <param name="Progress">Optional progress reporting settings.</param>
 /// <remarks>
 /// All fields are nullable to allow appsettings.json to be absent or incomplete.
 /// Null values indicate the setting was not provided, allowing the resolver to apply defaults.
@@ -21,7 +22,8 @@ namespace ReportSyncer.Console.Hosting;
 public sealed record HostAppSettings(
     HostRunSettings? Run, 
     HostUiSettings? Ui, 
-    HostLoggingSettings? Logging);
+    HostLoggingSettings? Logging,
+    HostProgressSettings? Progress);
 
 /// <summary>
 /// Host-level run settings from appsettings.json.
@@ -97,3 +99,14 @@ public sealed record HostLoggingRingSettings(
 public sealed record HostLoggingConsoleSettings(
     bool? Enabled,
     string? MinLevel);
+
+/// <summary>
+/// Progress reporting settings.
+/// </summary>
+/// <param name="FileLogIntervalMs">Minimum milliseconds between InProgress events in file logs. Must be positive. Default: 5000.</param>
+/// <remarks>
+/// This setting controls throttling of InProgress events in the text log file.
+/// Terminal events (Started/Completed/Failed/Skipped) are never throttled.
+/// </remarks>
+public sealed record HostProgressSettings(
+    int? FileLogIntervalMs);

@@ -38,7 +38,7 @@ public sealed class UiStateStore_TableSetInvariantTests
     }
 
     [Fact]
-    public void Apply_WithUnknownTable_DoesNotChangeRowCount()
+    public void Apply_WithUnknownTable_AddsTableDynamically()
     {
         // Arrange
         var tables = new[] { "dbo.TableA", "dbo.TableB" };
@@ -57,10 +57,13 @@ public sealed class UiStateStore_TableSetInvariantTests
         // Act
         store.Apply(uiEvent);
 
-        // Assert
+        // Assert: Unknown table should be dynamically added (new behavior)
         var rows = store.AllRows;
-        rows.Should().HaveCount(2, "unknown table should not be added");
-        rows.Should().NotContain(r => r.TableName == "dbo.UnknownTable");
+        rows.Should().HaveCount(3, "unknown table should be dynamically added");
+        rows.Should().Contain(r => r.TableName == "dbo.UnknownTable", "dynamic table should exist");
+        var newRow = rows.First(r => r.TableName == "dbo.UnknownTable");
+        newRow.Status.Should().Be(TableStatus.Planned, "newly added table starts in Planned status");
+        newRow.Phase.Should().Be("Insert", "should use the phase from the event");
     }
 
     [Fact]
@@ -84,8 +87,9 @@ public sealed class UiStateStore_TableSetInvariantTests
         store.Apply(uiEvent);
 
         // Assert - log warning cannot be verified with NullLogger, test passes if no exception
-        // The important part is that the row count doesn't change
-        store.AllRows.Should().HaveCount(1);
+        // With dynamic table addition, the row count increases to 2
+        store.AllRows.Should().HaveCount(2, "unknown table should be dynamically added");
+        store.AllRows.Should().Contain(r => r.TableName == "dbo.UnknownTable");
     }
 
     [Fact]

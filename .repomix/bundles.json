@@ -36,7 +36,7 @@
     "Full-Core-857": {
       "name": "Full-Core",
       "created": "2025-12-24T06:56:47.663Z",
-      "lastUsed": "2026-01-05T05:37:39.084Z",
+      "lastUsed": "2026-01-05T10:08:55.549Z",
       "tags": [],
       "files": [
         "ReportSyncer.Core/Exceptions",
@@ -53,10 +53,16 @@
     "Full-Console-520": {
       "name": "FullRepo-Console",
       "created": "2026-01-04T22:43:16.780Z",
-      "lastUsed": "2026-01-05T05:51:29.833Z",
+      "lastUsed": "2026-01-05T10:08:47.936Z",
       "tags": [],
       "files": [
-        "ReportSyncer.Console"
+        "ReportSyncer.Console/ExitCodes",
+        "ReportSyncer.Console/Hosting",
+        "ReportSyncer.Console/Logging",
+        "ReportSyncer.Console/UI",
+        "ReportSyncer.Console/appsettings.json",
+        "ReportSyncer.Console/Program.cs",
+        "ReportSyncer.Console/ReportSyncer.Console.csproj"
       ],
       "configPath": "/.repomix/config/Full-Console-repomix.config.json"
     }

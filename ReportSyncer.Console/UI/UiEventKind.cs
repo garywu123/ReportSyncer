@@ -21,5 +21,10 @@ public enum UiEventKind
     /// <summary>
     /// Table-level progress event.
     /// </summary>
-    Table
+    Table,
+
+    /// <summary>
+    /// Critical error from a reporter (triggers error display).
+    /// </summary>
+    CriticalError
 }

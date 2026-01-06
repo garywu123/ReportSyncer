@@ -26,6 +26,21 @@ public sealed class UiStateStore
     private readonly List<TableRowState> _rows;
     private readonly ILogger<UiStateStore> _logger;
     private readonly object _lock = new();
+    private Exception? _criticalError;
+
+    /// <summary>
+    /// Gets the critical error if a reporter failed.
+    /// </summary>
+    public Exception? CriticalError
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _criticalError;
+            }
+        }
+    }
 
     /// <summary>
     /// Gets a read-only snapshot of all table rows.
@@ -48,8 +63,7 @@ public sealed class UiStateStore
     /// <param name="logger">Logger for warnings.</param>
     public UiStateStore(IReadOnlyList<string> executionPlanTables, ILogger<UiStateStore> logger)
     {
-        if (executionPlanTables is null)
-            throw new ArgumentNullException(nameof(executionPlanTables));
+        ArgumentNullException.ThrowIfNull(executionPlanTables);
 
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -86,6 +100,16 @@ public sealed class UiStateStore
 
             case UiEventKind.Job:
                 // Job-level events don't update table rows in this minimal implementation
+                break;
+
+            case UiEventKind.CriticalError:
+                if (evt.Payload is Exception ex)
+                {
+                    lock (_lock)
+                    {
+                        _criticalError = ex;
+                    }
+                }
                 break;
         }
     }
@@ -138,10 +162,18 @@ public sealed class UiStateStore
 
         lock (_lock)
         {
+            // Dynamic table addition: if table not in list, add it
             if (!_tableNameToIndex.TryGetValue(tableName, out int index))
             {
-                _logger.LogWarning("Received event for unknown table: {TableName}. Table not in ExecutionPlan", tableName);
-                return;
+                _logger.LogInformation("Dynamically adding table to UI: {TableName}", tableName);
+                index = _rows.Count;
+                _tableNameToIndex[tableName] = index;
+                _rows.Add(new TableRowState(
+                    TableName: tableName,
+                    InsertOrder: index,
+                    Status: TableStatus.Planned,
+                    Phase: "Unknown",
+                    Remarks: null));
             }
 
             var existing = _rows[index];

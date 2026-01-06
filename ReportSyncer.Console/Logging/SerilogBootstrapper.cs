@@ -74,9 +74,6 @@ public static class SerilogBootstrapper
         var loggerConfig = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .Enrich.FromLogContext()
-            .Enrich.WithProperty("JobId", "")
-            .Enrich.WithProperty("Table", "")
-            .Enrich.WithProperty("Kind", "")
             .Enrich.WithProperty("Phase", "Bootstrap");
 
         // Step 2: Ring buffer sink (always enabled by default, safe)
@@ -144,15 +141,19 @@ public static class SerilogBootstrapper
                 flushToDiskInterval: TimeSpan.FromSeconds(1)));
         }
 
-        // Step 4: Console sink (optional, default off when UI enabled)
-        if (loggingSettings.Console!.Enabled!.Value)
+        // Step 4: Console sink (optional, disabled when UI enabled to prevent output pollution)
+        if (loggingSettings.Console!.Enabled!.Value && uiSettings.Enabled != true)
         {
-            fallbackLogger?.Information("Configuring console sink");
+            fallbackLogger?.Information("Configuring console sink (UI disabled, safe to write to console)");
             
             var minLevel = ParseLogLevel(loggingSettings.Console.MinLevel!);
             loggerConfig = loggerConfig.WriteTo.Console(
                 outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
                 restrictedToMinimumLevel: minLevel);
+        }
+        else if (loggingSettings.Console!.Enabled!.Value && uiSettings.Enabled == true)
+        {
+            fallbackLogger?.Information("Console sink disabled: UI is enabled (prevents output pollution)");
         }
 
         // Step 5: Create the logger and set it as the global logger

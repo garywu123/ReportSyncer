@@ -8,10 +8,14 @@
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ReportSyncer.Console.ExitCodes;
 using ReportSyncer.Console.Hosting;
 using ReportSyncer.Console.Logging;
+using ReportSyncer.Console.Observability;
+using ReportSyncer.Console.UI;
 using ReportSyncer.Core.Configuration;
+using ReportSyncer.Core.Observability;
 
 namespace ReportSyncer.Console;
 
@@ -118,19 +122,95 @@ internal class Program
             // Move to Execution phase (preflight is handled within RunAllJobsAsync for now)
             phase = HostPhase.Execution;
 
-            // Run all jobs (for now - will be refined with CLI job selection)
-            var results = await host.RunAllJobsAsync(cts.Token);
+            // === UI Pipeline + Reporter Wiring ===
+            UiPipeline? uiPipeline = null;
+            CancellationTokenSource? jobCts = null;
 
-            // Determine exit code based on results
-            var exitCode = DetermineExitCode(results, cts.Token.IsCancellationRequested);
-
-            if (exitCode == ExitCode.Success)
+            try
             {
-                loggerSetup.Logger.Information("Completed successfully (exit={ExitCode})", (int)exitCode);
-                System.Console.WriteLine($"Completed successfully (exit={(int)exitCode})");
-            }
+                // Create UI pipeline if enabled
+                if (effectiveUi.Enabled == true && ringBuffer != null)
+                {
+                    var maxLogLines = effectiveUi.AreaC?.MaxLines ?? 50;
 
-            return (int)exitCode;
+                    uiPipeline = UiPipeline.CreateEmpty(
+                        ringBuffer,
+                        maxLogLines,
+                        host.Services.GetRequiredService<ILogger<UiStateStore>>(),
+                        host.Services.GetRequiredService<ILogger<ConsoleJobProgressReporter>>(),
+                        host.Services.GetRequiredService<ILogger<ConsoleUiLoop>>());
+
+                    uiPipeline.Start();
+                    loggerSetup.Logger.Information("UI Pipeline started");
+                }
+
+                // Create job cancellation token (linked to main CTS)
+                jobCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+
+                // Critical error handler for reporters
+                Action<Exception> criticalErrorHandler = (ex) =>
+                {
+                    loggerSetup.Logger.Error(ex, "Critical reporter error - canceling current job");
+                    jobCts.Cancel();  // Cancel current job
+                    uiPipeline?.ReportCriticalError(ex);  // Show error in UI
+                };
+
+                // Build TextLogJobProgressReporter
+                var fileLogInterval = TimeSpan.FromMilliseconds(
+                    appSettings.Progress?.FileLogIntervalMs ?? 5000);
+                var textLogger = host.Services.GetRequiredService<ILogger<TextLogJobProgressReporter>>();
+                var throttler = new ProgressLogThrottler(TimeProvider.System, fileLogInterval);
+                var textReporter = new TextLogJobProgressReporter(textLogger, throttler);
+
+                // Build final reporter (Composite if UI enabled, otherwise just TextLog)
+                IJobProgressReporter finalReporter;
+                if (uiPipeline != null)
+                {
+                    var compositeLogger = host.Services.GetRequiredService<ILogger<CompositeJobProgressReporter>>();
+                    finalReporter = new CompositeJobProgressReporter(
+                        new IJobProgressReporter[] { textReporter, uiPipeline.Reporter },
+                        compositeLogger,
+                        criticalErrorHandler);
+
+                    loggerSetup.Logger.Information("Using CompositeJobProgressReporter (UI + TextLog)");
+                }
+                else
+                {
+                    finalReporter = textReporter;
+                    loggerSetup.Logger.Information("Using TextLogJobProgressReporter only");
+                }
+
+                // TODO: Register finalReporter to DI or pass to orchestrator
+                // For now, we need to modify ConsoleHost to accept IJobProgressReporter
+
+                // Run all jobs
+                var results = await host.RunAllJobsAsync(jobCts.Token);
+
+                // Determine exit code based on results
+                var exitCode = DetermineExitCode(results, cts.Token.IsCancellationRequested);
+
+                // Wait for user to view results before closing UI
+                if (uiPipeline != null)
+                {
+                    loggerSetup.Logger.Information("Waiting 2 seconds before closing UI");
+                    await Task.Delay(2000, CancellationToken.None);
+                    await uiPipeline.StopAsync();
+                }
+
+                // Console output (only if UI not enabled)
+                if (exitCode == ExitCode.Success && effectiveUi.Enabled != true)
+                {
+                    loggerSetup.Logger.Information("Completed successfully (exit={ExitCode})", (int)exitCode);
+                    System.Console.WriteLine($"Completed successfully (exit={(int)exitCode})");
+                }
+
+                return (int)exitCode;
+            }
+            finally
+            {
+                uiPipeline?.Dispose();
+                jobCts?.Dispose();
+            }
         }
         catch (Exception ex)
         {
@@ -252,6 +332,15 @@ internal class Program
             ? new HostLoggingSettings(fileSettings, null, null, progressThrottleMs)
             : null;
 
-        return new HostAppSettings(runSettings, uiSettings, loggingSettings);
+        // Progress settings (can be null)
+        HostProgressSettings? progressSettings = null;
+        var progressSection = configuration.GetSection("progress");
+        var fileLogIntervalMsValue = progressSection["fileLogIntervalMs"];
+        if (!string.IsNullOrEmpty(fileLogIntervalMsValue) && int.TryParse(fileLogIntervalMsValue, out var fileLogParsed) && fileLogParsed > 0)
+        {
+            progressSettings = new HostProgressSettings(fileLogParsed);
+        }
+
+        return new HostAppSettings(runSettings, uiSettings, loggingSettings, progressSettings);
     }
 }

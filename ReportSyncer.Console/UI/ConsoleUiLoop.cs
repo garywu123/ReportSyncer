@@ -9,6 +9,7 @@
 using Microsoft.Extensions.Logging;
 using ReportSyncer.Console.Logging;
 using ReportSyncer.Core.Sync.Contracts;
+using Spectre.Console;
 
 namespace ReportSyncer.Console.UI;
 
@@ -22,6 +23,8 @@ public sealed class ConsoleUiLoop
     private readonly UiStateStore _store;
     private readonly AreaBPager _pager;
     private readonly RingBufferLogStore _logStore;
+    private readonly ConsoleUiViewBuilder _viewBuilder;
+    private readonly int _maxLogLines;
     private readonly ILogger<ConsoleUiLoop> _logger;
     private readonly bool _interactive;
 
@@ -32,18 +35,24 @@ public sealed class ConsoleUiLoop
     /// <param name="store">State store to update.</param>
     /// <param name="pager">Pager for Area B.</param>
     /// <param name="logStore">Log store for Area C.</param>
+    /// <param name="viewBuilder">View builder for rendering.</param>
+    /// <param name="maxLogLines">Maximum log lines to display in Area C.</param>
     /// <param name="logger">Logger for errors.</param>
     public ConsoleUiLoop(
         UiEventQueue queue,
         UiStateStore store,
         AreaBPager pager,
         RingBufferLogStore logStore,
+        ConsoleUiViewBuilder viewBuilder,
+        int maxLogLines,
         ILogger<ConsoleUiLoop> logger)
     {
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _pager = pager ?? throw new ArgumentNullException(nameof(pager));
         _logStore = logStore ?? throw new ArgumentNullException(nameof(logStore));
+        _viewBuilder = viewBuilder ?? throw new ArgumentNullException(nameof(viewBuilder));
+        _maxLogLines = maxLogLines;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _interactive = !System.Console.IsInputRedirected;
@@ -136,106 +145,26 @@ public sealed class ConsoleUiLoop
     {
         try
         {
-            System.Console.Clear();
+            // Check for critical error first
+            var criticalError = _store.CriticalError;
+            if (criticalError != null)
+            {
+                AnsiConsole.Clear();
+                var errorPanel = _viewBuilder.BuildCriticalError(criticalError);
+                AnsiConsole.Write(errorPanel);
+                return;
+            }
 
-            // Area A: Job Summary
-            RenderAreaA();
-
-            System.Console.WriteLine();
-
-            // Area B: Table Status
-            RenderAreaB();
-
-            System.Console.WriteLine();
-
-            // Area C: Recent Logs
-            RenderAreaC();
-
-            System.Console.WriteLine();
-
-            // Area D: Key Hints
-            RenderAreaD();
+            // Normal rendering using view builder
+            AnsiConsole.Clear();
+            var view = _viewBuilder.Build(_store, _pager, _logStore, _maxLogLines, _interactive);
+            AnsiConsole.Write(view);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Render failed");
-        }
-    }
-
-    private void RenderAreaA()
-    {
-        var summary = _store.GetSummary();
-        System.Console.WriteLine($"=== Job Progress ===");
-        System.Console.WriteLine($"Total: {summary.Total} | Running: {summary.Running} | Completed: {summary.Completed} | Failed: {summary.Failed} | Skipped: {summary.Skipped}");
-    }
-
-    private void RenderAreaB()
-    {
-        System.Console.WriteLine($"=== Tables ===");
-
-        var allRows = _store.AllRows;
-
-        // Sort: Failed first, then by InsertOrder
-        var sortedRows = allRows
-            .OrderBy(r => r.Status == TableStatus.FailedExecution || r.Status == TableStatus.FailedPreFlight ? 0 : 1)
-            .ThenBy(r => r.InsertOrder)
-            .ToList();
-
-        // Select page
-        var pageRows = _pager.SelectPage(sortedRows);
-        var pageInfo = _pager.GetPageInfo(sortedRows.Count);
-
-        System.Console.WriteLine($"Page {pageInfo.PageIndex + 1}/{pageInfo.PageCount} | Showing {pageInfo.StartRowNumber}-{pageInfo.EndRowNumber} of {pageInfo.TotalCount}");
-
-        if (pageRows.Count == 0)
-        {
-            System.Console.WriteLine("(no tables)");
-            return;
-        }
-
-        foreach (var row in pageRows)
-        {
-            var statusSymbol = row.Status switch
-            {
-                TableStatus.Planned => "⏳",
-                TableStatus.Succeeded => "✅",
-                TableStatus.FailedPreFlight => "❌",
-                TableStatus.FailedExecution => "❌",
-                TableStatus.SkippedDryRun => "⏭️",
-                TableStatus.Cancelled => "🚫",
-                _ => "?"
-            };
-
-            var remarks = string.IsNullOrWhiteSpace(row.Remarks) ? "" : $" | {row.Remarks}";
-            System.Console.WriteLine($"{statusSymbol} {row.TableName} - {row.Phase}{remarks}");
-        }
-    }
-
-    private void RenderAreaC()
-    {
-        System.Console.WriteLine($"=== Recent Logs ===");
-
-        var logs = _logStore.Snapshot();
-        var recentLogs = logs.TakeLast(10).ToList();
-
-        if (recentLogs.Count == 0)
-        {
-            System.Console.WriteLine("(no logs)");
-            return;
-        }
-
-        foreach (var log in recentLogs)
-        {
-            System.Console.WriteLine(log);
-        }
-    }
-
-    private void RenderAreaD()
-    {
-        if (_interactive)
-        {
-            System.Console.WriteLine($"=== Controls ===");
-            System.Console.WriteLine("n/] = Next Page | p/[ = Previous Page");
+            // Fallback to console.error if Spectre fails
+            System.Console.Error.WriteLine($"Render error: {ex.Message}");
         }
     }
 }

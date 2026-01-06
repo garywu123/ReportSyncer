@@ -43,7 +43,8 @@ public sealed class UiPipeline : IDisposable
         _store = store;
         _pager = pager;
         Reporter = reporter;
-        _uiLoop = new ConsoleUiLoop(queue, store, pager, logStore, loopLogger);
+        var viewBuilder = new ConsoleUiViewBuilder();
+        _uiLoop = new ConsoleUiLoop(queue, store, pager, logStore, viewBuilder, maxLogLines: 50, loopLogger);
         _uiCts = new CancellationTokenSource();
     }
 
@@ -74,6 +75,68 @@ public sealed class UiPipeline : IDisposable
         var reporter = new ConsoleJobProgressReporter(queue, reporterLogger);
 
         return new UiPipeline(queue, store, pager, logStore, reporter, storeLogger, loopLogger);
+    }
+
+    /// <summary>
+    /// Creates a UI pipeline with an empty table list (for dynamic initialization).
+    /// </summary>
+    /// <param name="logStore">Ring buffer log store for Area C.</param>
+    /// <param name="maxLogLines">Maximum log lines to display in Area C.</param>
+    /// <param name="storeLogger">Logger for UiStateStore.</param>
+    /// <param name="reporterLogger">Logger for ConsoleJobProgressReporter.</param>
+    /// <param name="loopLogger">Logger for ConsoleUiLoop.</param>
+    /// <returns>A configured UI pipeline with empty table list.</returns>
+    /// <remarks>
+    /// This method creates a UI pipeline without requiring PreFlight results.
+    /// Tables are dynamically added to the UI as TableProgressEvents arrive.
+    /// Use this when PreFlight happens inside the orchestrator and results are not available upfront.
+    /// </remarks>
+    public static UiPipeline CreateEmpty(
+        RingBufferLogStore logStore,
+        int maxLogLines,
+        ILogger<UiStateStore> storeLogger,
+        ILogger<ConsoleJobProgressReporter> reporterLogger,
+        ILogger<ConsoleUiLoop> loopLogger)
+    {
+        var tables = new List<string>();  // Empty list - tables added dynamically
+        var queue = new UiEventQueue();
+        var store = new UiStateStore(tables, storeLogger);
+        var pager = new AreaBPager(pageSize: 20);
+        var reporter = new ConsoleJobProgressReporter(queue, reporterLogger);
+        var viewBuilder = new ConsoleUiViewBuilder();
+        var uiLoop = new ConsoleUiLoop(queue, store, pager, logStore, viewBuilder, maxLogLines, loopLogger);
+
+        return new UiPipeline(queue, store, pager, reporter, uiLoop);
+    }
+
+    /// <summary>
+    /// Private constructor for CreateEmpty path.
+    /// </summary>
+    private UiPipeline(
+        UiEventQueue queue,
+        UiStateStore store,
+        AreaBPager pager,
+        ConsoleJobProgressReporter reporter,
+        ConsoleUiLoop uiLoop)
+    {
+        _queue = queue;
+        _store = store;
+        _pager = pager;
+        Reporter = reporter;
+        _uiLoop = uiLoop;
+        _uiCts = new CancellationTokenSource();
+    }
+
+    /// <summary>
+    /// Reports a critical error to the UI (displays error panel).
+    /// </summary>
+    /// <param name="ex">The exception to display.</param>
+    public void ReportCriticalError(Exception ex)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+
+        var evt = new UiEvent(UiEventKind.CriticalError, ex, DateTimeOffset.UtcNow);
+        _queue.TryEnqueue(evt);
     }
 
     /// <summary>
